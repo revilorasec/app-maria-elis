@@ -324,7 +324,8 @@ function normalizedChecklist(task) { return (task.checklist || []).map((item) =>
 function defaultChecklist(type) { return ({ Medicamento: ['Conferir nome do remédio', 'Conferir horário', 'Dar medicamento', 'Registrar se tomou tudo'], Lanche: ['Preparar lanche', 'Oferecer', 'Tirar foto', 'Registrar aceitação'], Almoço: ['Aquecer comida', 'Conferir temperatura', 'Dar almoço', 'Tirar foto do prato', 'Registrar aceitação'], Sono: ['Preparar ambiente', 'Registrar início', 'Registrar fim'], Banho: ['Separar itens', 'Dar banho', 'Registrar observação'] })[type] || []; }
 function userName(id) { return data.users?.find((item) => item.id === id)?.name || 'Usuário autorizado'; }
 function formatDateTime(value) { return new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(value)); }
- {
+
+function renderTimeline(date, limit) {
   const taskEvents = data.dailyTasks.filter((task) => task.date === date && (isDone(task) || task.status === 'pending')).map((task) => ({ time: task.completedAt?.slice(11, 16) || task.scheduledTime, type: isDone(task) ? 'Tarefa concluída' : 'Tarefa pendente', description: task.title, icon: isDone(task) ? '✓' : '○', state: isDone(task) ? 'done' : 'pending' }));
   const logEvents = data.dailyLogs.filter((log) => log.date === date).map((log) => ({ time: log.time, type: log.type, description: log.description, icon: iconFor(log.type), state: log.isImportant ? 'important' : 'normal' }));
   const photoEvents = data.dailyPhotos.filter((photo) => photo.date === date).map((photo) => ({ time: photo.uploadedAt.slice(11, 16), type: 'Foto', description: photo.caption || photo.category, icon: '◉', state: 'normal', photo }));
