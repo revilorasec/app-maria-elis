@@ -1,4 +1,4 @@
-import { loadData, addRecord, updateRecord, removeRecord, saveData, resetLocalCache, localDate, setPersistence, flushPersistence } from './services/dataService.js';
+import { loadData, addRecord, updateRecord, removeRecord, saveData, resetLocalCache, localDate, setPersistence, flushPersistence } from './services/dataService.js?v=9';
 import { can, getRoleLabel } from './services/permissionsService.js';
 import { notify, offlineNotice } from './services/notificationService.js';
 import { lineChart, donutChart } from './services/chartService.js';
@@ -661,6 +661,6 @@ function bindConnectivity() {
   window.addEventListener('offline', update);
 }
 function registerServiceWorker() {
-  if ('serviceWorker' in navigator) navigator.serviceWorker.register('./service-worker.js?v=8').catch(() => {});
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('./service-worker.js?v=9').catch(() => {});
 }
 
