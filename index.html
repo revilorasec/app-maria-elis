@@ -15,7 +15,18 @@
     <a class="skip-link" href="#main-content">Pular para o conteúdo</a>
     <noscript>Ative o JavaScript para usar esta aplicação.</noscript>
     <div id="app" class="app-shell"></div>
-    <script src="https://cdn.jsdelivr.net/npm/@azure/msal-browser@2.38.4/lib/msal-browser.min.js" crossorigin="anonymous"></script>
-    <script type="module" src="assets/js/app.js"></script>
+    <script>
+      (function () {
+        function showStartupError(message) {
+          var app = document.getElementById('app');
+          if (!app || app.dataset.startupErrorShown === 'true') return;
+          app.dataset.startupErrorShown = 'true';
+          app.innerHTML = '<main class="fatal"><h1>Não foi possível abrir o app</h1><p>Atualize a página e tente novamente.</p><p class="muted">' + String(message || 'Erro de carregamento').replace(/[&<>]/g, '') + '</p></main>';
+        }
+        window.addEventListener('error', function (event) { showStartupError(event.message); });
+        window.addEventListener('unhandledrejection', function (event) { showStartupError(event.reason && event.reason.message); });
+      }());
+    </script>    <script src="https://cdn.jsdelivr.net/npm/@azure/msal-browser@2.38.4/lib/msal-browser.min.js" crossorigin="anonymous"></script>
+    <script type="module" src="assets/js/app.js?v=8"></script>
   </body>
 </html>
