@@ -62,6 +62,14 @@ export function updateRecord(collection, id, updates, userId) {
   return state[collection][index];
 }
 
+export function removeRecord(collection, id, userId) {
+  const index = state?.[collection]?.findIndex((item) => item.id === id) ?? -1;
+  if (index === -1) throw new Error('Registro não encontrado.');
+  const [removed] = state[collection].splice(index, 1);
+  appendAudit('delete', collection, id, userId, removed, null);
+  persist();
+  return removed;
+}
 export async function flushPersistence() {
   await syncQueue;
 }
