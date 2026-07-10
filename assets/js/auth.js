@@ -1,9 +1,4 @@
 const CONFIG_KEY = 'maria-onedrive-config';
-const MSAL_SOURCES = [
-  'https://alcdn.msauth.net/browser/2.38.3/js/msal-browser.min.js',
-  'https://cdn.jsdelivr.net/npm/@azure/msal-browser@2.38.4/lib/msal-browser.min.js'
-];
-
 export const GRAPH_SCOPES = ['User.Read', 'Files.ReadWrite'];
 
 let client = null;
@@ -77,27 +72,8 @@ export async function getAccessToken() {
   }
 }
 
-async function ensureMsal() {
-  if (window.msal?.PublicClientApplication) return;
-  let lastError;
-  for (const src of MSAL_SOURCES) {
-    try {
-      await loadScript(src);
-      if (window.msal?.PublicClientApplication) return;
-    } catch (error) { lastError = error; }
+function ensureMsal() {
+  if (!window.msal?.PublicClientApplication) {
+    throw new Error('A biblioteca de login Microsoft não foi carregada. Verifique a conexão e recarregue a página.');
   }
-  throw lastError || new Error('Não foi possível carregar o login Microsoft.');
-}
-
-function loadScript(src) {
-  return new Promise((resolve, reject) => {
-    const existing = document.querySelector(`script[src="${src}"]`);
-    if (existing) return existing.dataset.loaded === 'true' ? resolve() : existing.addEventListener('load', resolve, { once: true });
-    const script = document.createElement('script');
-    script.src = src;
-    script.async = true;
-    script.onload = () => { script.dataset.loaded = 'true'; resolve(); };
-    script.onerror = () => reject(new Error('Falha ao carregar MSAL. Verifique a conexão.'));
-    document.head.append(script);
-  });
 }
