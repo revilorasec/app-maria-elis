@@ -1,4 +1,4 @@
-import { loadData, addRecord, updateRecord, saveData, resetLocalCache, localDate, setPersistence, flushPersistence } from './services/dataService.js';
+import { loadData, addRecord, updateRecord, removeRecord, saveData, resetLocalCache, localDate, setPersistence, flushPersistence } from './services/dataService.js';
 import { can, getRoleLabel } from './services/permissionsService.js';
 import { notify, offlineNotice } from './services/notificationService.js';
 import { lineChart, donutChart } from './services/chartService.js';
@@ -7,6 +7,7 @@ import { clearOneDriveConfig, initializeMicrosoftSession, saveOneDriveConfig, si
 import { connectOneDrive, getFileUrl, getRootWebUrl, loadDB, restoreDB, saveDB, uploadFile } from './storage.js';
 import { eventPhotoPath, listPendingPhotos, queuePendingPhoto, removePendingPhoto, resizeImage } from './photos.js';
 import { renderConnectionStatus } from './ui.js';
+import { importLegacyBundle, migrationReportText } from './migration.js';
 
 const app = document.querySelector('#app');
 const pageNames = {
@@ -21,6 +22,9 @@ let user;
 let oneDriveConfig;
 let microsoftAccount;
 let syncState = 'Conectando';
+let selectedTaskId = null;
+let historyFilter = { period: 'today', date: localDate(), type: '' };
+let lastMigrationReport = null;
 
 init();
 
@@ -40,6 +44,7 @@ async function init() {
     const initialData = await loadData();
     await connectOneDrive(oneDriveConfig.folderName);
     data = await loadData(await loadDB(initialData));
+    const normalizedLegacyData = normalizeLegacyData();
     setPersistence({
       save: async (snapshot) => {
         setSyncState('Salvando');
@@ -52,6 +57,7 @@ async function init() {
         notify(`Alteração guardada neste aparelho. A sincronização falhou: ${error.message}`, 'warning');
       }
     });
+    if (normalizedLegacyData) saveData(data);
     user = resolveAuthorizedUser(microsoftAccount);
     await syncPendingPhotoUploads();
     syncState = 'Sincronizado';
@@ -61,6 +67,21 @@ async function init() {
   }
 }
 
+function normalizeLegacyData() {
+  let changed = false;
+  const typeByCategory = { 'alimentação': 'Lanche', medicamento: 'Medicamento', sono: 'Sono', banho: 'Banho', atividade: 'Brincadeira', observação: 'Observação', sintoma: 'Sintoma' };
+  if (data.childProfile?.name === 'Criança Exemplo') { data.childProfile.name = 'Maria Elis'; changed = true; }
+  if (!Array.isArray(data.dailyTasks)) { data.dailyTasks = []; changed = true; }
+  data.dailyTasks = data.dailyTasks.map((task) => {
+    const next = { ...task };
+    if (!next.taskType) { next.taskType = typeByCategory[next.category] || 'Outro'; changed = true; }
+    if (next.familyNote == null) { next.familyNote = next.description || ''; changed = true; }
+    if (!Array.isArray(next.checklist)) { next.checklist = []; changed = true; }
+    if (next.caregiverNote == null) { next.caregiverNote = ''; changed = true; }
+    return next;
+  });
+  return changed;
+}
 function resolveAuthorizedUser(account) {
   const email = String(account.username || '').trim().toLowerCase();
   const registered = (data.users || []).filter((item) => item.email && !item.email.endsWith('.invalid'));
@@ -106,7 +127,7 @@ function render() {
         <img src="${escape(profile.photoUrl)}" alt="Avatar ilustrativo" class="topbar__avatar">
         <div><p class="eyebrow">Cuidado da criança</p><strong>${escape(profile.name)}</strong></div>
       </div>
-      <div class="topbar__actions">
+      <div class="topbar__actions"><button class="icon-button" data-page="more" aria-label="Abrir mais opções" title="Mais opções">☰</button>
         <span id="sync-indicator" class="offline-indicator">${escape(syncState)}</span><span id="offline-indicator" class="offline-indicator" ${navigator.onLine ? 'hidden' : ''}>Offline</span>
         <button class="icon-button" data-action="toggle-theme" aria-label="Alternar tema" title="Alternar tema">◐</button>
       </div>
@@ -122,7 +143,13 @@ function render() {
 function renderPage() {
   switch (currentPage) {
     case 'home': return renderHome();
-    case 'instructions': return renderInstructions();
+    case 'instructions': return renderAfazeres();
+    case 'tasks': return renderAfazeres();
+    case 'task-detail': return renderTaskDetail();
+    case 'history': return renderHistory();
+    case 'child-data': return renderChildData();
+    case 'users': return renderUsers();
+    case 'migration': return renderMigration();
     case 'register': return renderRegister();
     case 'emergency': return renderEmergency();
     case 'more': return renderMore();
@@ -139,147 +166,46 @@ function renderPage() {
 
 function renderHome() {
   const today = localDate();
-  const todayTasks = data.dailyTasks.filter((task) => task.date === today);
-  const completed = todayTasks.filter(isDone).length;
-  const pending = todayTasks.length - completed;
-  const nextAppointment = data.appointments.filter((item) => item.status === 'scheduled').sort((a, b) => a.date.localeCompare(b.date))[0];
-  const vaccineAlert = data.vaccines.find((vaccine) => vaccine.status === 'overdue') || data.vaccines.find((vaccine) => vaccine.status === 'upcoming');
-  const lastGrowth = [...data.growthRecords].sort((a, b) => b.date.localeCompare(a.date))[0];
-  const unread = !data.dailyConfirmations.some((item) => item.instructionId === 'inst-demo-today' && item.userId === user.id);
-  const latestPhotos = data.dailyPhotos.filter((photo) => photo.date === today).slice(0, 3);
-
+  const tasks = tasksForDate(today);
+  const pending = tasks.filter((task) => !isDone(task));
+  const completed = tasks.filter(isDone);
   return `
     <section class="page-heading">
-      <div><p class="eyebrow">${formatLongDate(today)}</p><h1>Bom dia, ${escape(firstName(user.name))}.</h1><p class="muted">O essencial da rotina em um só lugar.</p></div>
-      <button class="avatar-button" data-page="settings" aria-label="Abrir configurações de perfil">${initials(user.name)}</button>
+      <div><p class="eyebrow">${formatLongDate(today)}</p><h1>Bom dia, ${escape(firstName(user.name))}.</h1><p class="muted">Hoje, ${escape(profile().name)} tem ${tasks.length} afazer(es).</p></div>
+      <button class="avatar-button" data-page="settings" aria-label="Abrir configurações">${initials(user.name)}</button>
     </section>
-
-    <section class="hero-card">
-      <div class="hero-card__copy"><span class="status-pill status-pill--soft">${escape(ageFrom(profile().birthDate))}</span><h2>${escape(profile().name)}</h2><p>${escape(connectionSummary(user))}</p></div>
-      <img src="${escape(profile().photoUrl)}" alt="Avatar ilustrativo da criança" class="hero-card__avatar">
-    </section>
-
-    <section class="quick-actions" aria-label="Registros rápidos">
-      <button class="quick-action" data-quick="foto"><span>◉</span>Foto</button>
-      <button class="quick-action" data-quick="alimentação"><span>◌</span>Alimentação</button>
-      <button class="quick-action" data-quick="sono"><span>☾</span>Sono</button>
-      <button class="quick-action" data-quick="medicamento"><span>✚</span>Remédio</button>
-      <button class="quick-action" data-quick="sintoma"><span>⌁</span>Sintoma</button>
-      <button class="quick-action" data-quick="observação"><span>✎</span>Nota</button>
-    </section>
-
-    <section class="section-block">
-      <div class="section-title"><div><p class="eyebrow">Hoje</p><h2>Plano do dia</h2></div><button class="text-button" data-page="instructions">Ver tudo</button></div>
-      <article class="progress-card">
-        ${donutChart({ completed, pending })}
-        <div><strong>${completed} de ${todayTasks.length} tarefas concluídas</strong><p class="muted">${unread ? 'As orientações ainda precisam ser confirmadas.' : 'Orientações confirmadas.'}</p><button class="button button--secondary button--small" data-page="instructions">Abrir orientações</button></div>
-      </article>
-    </section>
-
-    <section class="section-block">
-      <div class="section-title"><div><p class="eyebrow">Atenção</p><h2>Alertas importantes</h2></div></div>
-      <div class="alert-stack">
-        ${unread ? alertCard('Orientações ainda não confirmadas', 'Confirme a leitura para os responsáveis acompanharem.', 'instructions', 'important') : ''}
-        ${todayTasks.filter((task) => task.priority === 'required' && !isDone(task)).map((task) => alertCard(`${task.title} pendente`, `Previsto para ${task.scheduledTime}.`, 'instructions', 'danger')).join('')}
-        ${vaccineAlert ? alertCard(`Vacina ${vaccineAlert.status === 'overdue' ? 'em atraso' : 'próxima'}`, `${vaccineAlert.name} · ${formatDate(vaccineAlert.expectedDate)}`, 'vaccines', vaccineAlert.status === 'overdue' ? 'danger' : 'info') : ''}
-        ${nextAppointment ? alertCard('Próxima consulta', `${nextAppointment.specialty} · ${formatDate(nextAppointment.date)} às ${nextAppointment.time}`, 'appointments', 'info') : ''}
-      </div>
-    </section>
-
-    <section class="section-block two-up">
-      <article class="mini-card" data-page="growth" role="button" tabindex="0"><span class="mini-card__icon">↗</span><p class="eyebrow">Crescimento</p><strong>${lastGrowth ? `${lastGrowth.weight.toFixed(1)} kg` : 'Sem dados'}</strong><p class="muted">Último registro</p></article>
-      <article class="mini-card" data-page="routine" role="button" tabindex="0"><span class="mini-card__icon">◷</span><p class="eyebrow">Registros</p><strong>${data.dailyLogs.filter((log) => log.date === today).length}</strong><p class="muted">Hoje</p></article>
-    </section>
-
-    <section class="section-block">
-      <div class="section-title"><div><p class="eyebrow">Acompanhar</p><h2>Últimos registros</h2></div><button class="text-button" data-page="routine">Timeline</button></div>
-      <div class="timeline compact">${renderTimeline(today, 4)}</div>
-    </section>
-
-    ${latestPhotos.length ? `<section class="section-block"><div class="section-title"><div><p class="eyebrow">Registros visuais</p><h2>Fotos de hoje</h2></div></div><div class="photo-strip">${latestPhotos.map(renderPhoto).join('')}</div></section>` : ''}
-  `;
+    <section class="hero-card hero-card--tasks"><div class="hero-card__copy"><span class="status-pill status-pill--soft">${escape(syncState)}</span><h2>Afazeres do dia</h2><p>${pending.length} pendente(s) e ${completed.length} concluído(s).</p></div><img src="${escape(profile().photoUrl)}" alt="Avatar de ${escape(profile().name)}" class="hero-card__avatar"></section>
+    <section class="today-actions">${can(user.role, 'tasks:create') ? `<button class="button button--wide" data-page="register">＋ Adicionar afazer</button>` : ''}<button class="button button--secondary button--wide" data-page="register">◉ Registrar foto/observação</button></section>
+    <section class="section-block"><div class="section-title"><div><p class="eyebrow">Agora</p><h2>Pendentes</h2></div><span class="status-pill status-pill--warning">${pending.length}</span></div><div class="task-list">${pending.map(renderDayTask).join('') || emptyState('Nenhum afazer pendente.', 'A rotina de hoje está em dia.', '')}</div></section>
+    <section class="section-block"><div class="section-title"><div><p class="eyebrow">Feitos</p><h2>Concluídas</h2></div><span class="status-pill status-pill--success">${completed.length}</span></div><div class="task-list">${completed.map(renderDayTask).join('') || '<p class="muted">As tarefas concluídas aparecerão aqui.</p>'}</div></section>`;
 }
 
-function renderInstructions() {
-  const today = localDate();
-  const instruction = data.dailyInstructions.find((item) => item.date === today);
-  const tasks = data.dailyTasks.filter((task) => task.date === today).sort((a, b) => a.scheduledTime.localeCompare(b.scheduledTime));
-  const confirmation = instruction && data.dailyConfirmations.find((item) => item.instructionId === instruction.id && item.userId === user.id);
-  const completed = tasks.filter(isDone).length;
-  const canConfirm = can(user.role, 'instructions:confirm');
-  const canComplete = can(user.role, 'tasks:complete');
-
-  return `
-    ${subPageHeading('Orientações do Dia', 'Uma rotina clara, simples e acompanhável.')}
-    <article class="instruction-hero">
-      <div><span class="status-pill status-pill--soft">${formatDate(today)}</span><h2>${escape(instruction?.title || 'Sem plano publicado')}</h2><p>${escape(instruction?.description || 'Crie as orientações do dia para começar.')}</p></div>
-      ${instruction ? (confirmation ? `<span class="confirmation confirmation--done">✓ Leitura confirmada</span>` : `<button class="button" data-action="confirm-reading" ${canConfirm ? '' : 'disabled'}>Li e entendi</button>`) : ''}
-    </article>
-    ${!canConfirm && instruction && !confirmation ? `<p class="permission-note">Seu perfil pode visualizar, mas não confirmar estas orientações.</p>` : ''}
-    <section class="section-block">
-      <div class="section-title"><div><p class="eyebrow">Checklist</p><h2>${completed}/${tasks.length} concluídas</h2></div><button class="text-button" data-action="print-report">Resumo</button></div>
-      <div class="task-list">${tasks.map((task) => renderTask(task, canComplete)).join('') || emptyState('Ainda não há tarefas para hoje.', 'Criar registro', 'register')}</div>
-    </section>
-    <section class="section-block">
-      <div class="section-title"><div><p class="eyebrow">Feed do dia</p><h2>O que aconteceu</h2></div><button class="text-button" data-page="routine">Ver timeline</button></div>
-      <div class="timeline">${renderTimeline(today, 12)}</div>
-    </section>
-  `;
+function renderAfazeres() {
+  const tasks = tasksForDate(localDate());
+  const pending = tasks.filter((task) => !isDone(task));
+  const completed = tasks.filter(isDone);
+  return `${subPageHeading('Afazeres do dia', 'Uma lista simples para seguir a rotina.')}${can(user.role, 'tasks:create') ? `<button class="button button--wide" data-page="register">＋ Adicionar afazer</button>` : ''}<section class="section-block"><div class="section-title"><div><p class="eyebrow">Em ordem de horário</p><h2>Pendentes</h2></div><span class="status-pill status-pill--warning">${pending.length}</span></div><div class="task-list">${pending.map(renderDayTask).join('') || emptyState('Nenhum afazer pendente.', 'Use Adicionar afazer para montar a rotina.', 'register')}</div></section><section class="section-block"><div class="section-title"><div><p class="eyebrow">Concluídas</p><h2>Feitas hoje</h2></div><span class="status-pill status-pill--success">${completed.length}</span></div><div class="task-list">${completed.map(renderDayTask).join('') || '<p class="muted">Nenhum afazer concluído ainda.</p>'}</div></section>`;
 }
-
 function renderRegister() {
-  const options = [
-    ['foto', '◉', 'Tirar foto'], ['alimentação', '◌', 'Alimentação'], ['sono', '☾', 'Sono'],
-    ['medicamento', '✚', 'Medicamento'], ['sintoma', '⌁', 'Sintoma'], ['observação', '✎', 'Observação'],
-    ['tarefa', '✓', 'Tarefa concluída'], ['evento', '★', 'Evento importante']
-  ];
-  const hasPermission = can(user.role, 'logs:create');
-  const requiresPhoto = selectedRegisterType === 'foto';
-  return `
-    ${subPageHeading('Registrar', 'Poucos toques para contar como foi o dia.')}
-    <section class="register-picker" aria-label="Tipo de registro">${options.map(([id, icon, label]) => `<button class="register-type ${selectedRegisterType === id ? 'register-type--active' : ''}" data-register-type="${id}" ${id === 'foto' && !can(user.role, 'photos:attach') ? 'disabled' : ''}><span>${icon}</span>${label}</button>`).join('')}</section>
-    <form id="quick-form" class="form-card" novalidate>
-      <input type="hidden" name="type" value="${escape(selectedRegisterType)}">
-      <div class="form-card__title"><span class="form-icon">${options.find((option) => option[0] === selectedRegisterType)?.[1] || '✎'}</span><div><h2>${escape(options.find((option) => option[0] === selectedRegisterType)?.[2] || 'Registro')}</h2><p class="muted">Será salvo no feed de hoje.</p></div></div>
-      <label>Horário<input type="time" name="time" value="${currentTime()}" required></label>
-      <label>Descrição<textarea name="description" rows="4" placeholder="Conte o que aconteceu…" required></textarea></label>
-      ${selectedRegisterType === 'sono' ? `<div class="form-grid"><label>Início<input type="time" name="sleepStart"></label><label>Fim<input type="time" name="sleepEnd"></label></div>` : ''}
-      ${selectedRegisterType === 'sintoma' ? `<label>Sintoma principal<input name="symptoms" placeholder="Ex.: tosse, febre, irritação"></label>` : ''}
-      ${selectedRegisterType === 'tarefa' ? `<label>Tarefa relacionada<select name="taskId"><option value="">Nenhuma / registro livre</option>${data.dailyTasks.filter((task) => task.date === localDate() && !isDone(task)).map((task) => `<option value="${task.id}">${escape(task.title)}</option>`).join('')}</select></label>` : ''}
-      <label class="check-row"><input type="checkbox" name="important"> Marcar como importante</label>
-      ${requiresPhoto ? photoInput() : `<button type="button" class="attachment-button" data-action="open-photo" data-context="free">◉ Adicionar foto (opcional)</button>`}
-      <button class="button button--wide" type="submit" ${hasPermission ? '' : 'disabled'}>Salvar registro</button>
-      ${!hasPermission ? '<p class="permission-note">Seu perfil atual não pode criar registros.</p>' : ''}
-    </form>
-  `;
+  const canCreate = can(user.role, 'tasks:create');
+  const types = taskTypes();
+  return `${subPageHeading('Registrar', 'Criar a rotina ou registrar como foi o dia.')}
+    ${canCreate ? `<section class="settings-card"><div class="section-title"><div><p class="eyebrow">Responsáveis</p><h2>Adicionar afazer</h2></div></div><form id="task-form" class="form-card"><label>Data<input name="date" type="date" value="${localDate()}" required></label><div class="form-grid"><label>Horário<input name="scheduledTime" type="time" value="${currentTime()}" required></label><label>Tipo<select name="taskType">${types.map((type) => `<option value="${type}">${type}</option>`).join('')}</select></label></div><label>Título<input name="title" required placeholder="Ex.: Lanche da manhã"></label><label>Orientação da família<textarea name="familyNote" rows="4" placeholder="Explique o que fazer e os cuidados importantes."></textarea></label><label>Checklist (um item por linha)<textarea name="checklistText" rows="5" placeholder="Lavar as mãos&#10;Preparar o lanche&#10;Tirar foto"></textarea></label><label class="check-row"><input type="checkbox" name="requiresPhoto"> Solicitar foto neste afazer</label><button class="button button--wide" type="submit">Salvar afazer</button></form></section>` : ''}
+    <section class="settings-card"><div class="section-title"><div><p class="eyebrow">Babá e responsáveis</p><h2>Registrar foto ou observação</h2></div></div><form id="quick-form" class="form-card"><label>Tipo<select name="type">${types.map((type) => `<option value="${type}">${type}</option>`).join('')}</select></label><label>Horário<input type="time" name="time" value="${currentTime()}" required></label><label>Observação<textarea name="description" rows="3" required placeholder="Conte como foi."></textarea></label>${photoInput()}<button class="button button--secondary button--wide" type="submit">Salvar registro</button></form></section>`;
 }
-
 function renderEmergency() {
-  const contacts = [...data.emergencyContacts].sort((a, b) => a.priority - b.priority);
-  const doctor = data.doctors[0];
-  return `
-    ${subPageHeading('Emergência', 'Informações essenciais para agir rápido.')}
-    <section class="emergency-banner"><span>⚕</span><div><h2>Em risco imediato?</h2><p>Ligue para o serviço de emergência da sua região. Este app não substitui orientação médica.</p></div></section>
-    <section class="section-block"><div class="section-title"><div><p class="eyebrow">Ligar agora</p><h2>Responsáveis</h2></div></div><div class="contact-list">${contacts.map(renderContact).join('')}</div></section>
-    <section class="section-block"><div class="section-title"><div><p class="eyebrow">Saúde</p><h2>Resumo crítico</h2></div></div>
-      <article class="critical-card"><div><span>Alergias</span><strong>${escape(profile().allergies.join(', '))}</strong></div><div><span>Tipo sanguíneo</span><strong>${escape(profile().bloodType)}</strong></div><div class="critical-card__wide"><span>Observações</span><strong>${escape(profile().criticalNotes)}</strong></div></article>
-    </section>
-    ${doctor ? `<section class="section-block"><div class="section-title"><div><p class="eyebrow">Profissional</p><h2>${escape(doctor.specialty)}</h2></div></div><article class="contact-card"><div class="contact-card__avatar">⚕</div><div><strong>${escape(doctor.name)}</strong><p>${escape(doctor.clinic)}</p></div><a class="call-button" href="tel:${phoneHref(doctor.phone)}" aria-label="Ligar para profissional">☎</a></article></section>` : ''}
-  `;
+  const contacts = [...(data.emergencyContacts || [])].sort((a, b) => a.priority - b.priority); const doctor = data.doctors?.[0];
+  return `${subPageHeading('Emergência', 'Contatos e cuidados importantes.')}<section class="emergency-banner"><span>⚕</span><div><h2>Risco imediato?</h2><p>Acione o serviço de emergência local. Este app não substitui atendimento médico.</p></div></section><section class="emergency-grid">${contacts.map((contact) => `<a class="emergency-action" href="tel:${phoneHref(contact.phone)}"><strong>${escape(contact.relationship || contact.name)}</strong><small>${escape(contact.name)}</small><span>☎</span></a>`).join('')}${doctor ? `<a class="emergency-action" href="tel:${phoneHref(doctor.phone)}"><strong>Pediatra</strong><small>${escape(doctor.name)}</small><span>☎</span></a>` : ''}<a class="emergency-action" href="tel:192"><strong>Emergência médica</strong><small>Chamar atendimento</small><span>☎</span></a></section><section class="section-block"><div class="section-title"><div><p class="eyebrow">Cuidados importantes</p><h2>Saúde</h2></div></div><article class="critical-card"><div class="critical-card__wide"><span>Alergias</span><strong>${escape((profile().allergies || []).join(', ') || 'Não informado')}</strong></div><div class="critical-card__wide"><span>Observações</span><strong>${escape(profile().criticalNotes || 'Não informado')}</strong></div><div><span>Convênio</span><strong>${escape(profile().healthPlan || 'Não informado')}</strong></div><div><span>Tipo sanguíneo</span><strong>${escape(profile().bloodType || 'Não informado')}</strong></div><div class="critical-card__wide"><span>Endereço</span><strong>${escape(profile().address || 'Não informado')}</strong></div></article></section>`;
 }
-
 function renderMore() {
   const items = [
-    ['documents', '▣', 'Documentos', 'Arquivos privados no OneDrive'], ['vaccines', '◈', 'Vacinas', 'Histórico e alertas'],
-    ['appointments', '◷', 'Consultas', 'Agenda e retornos'], ['growth', '↗', 'Crescimento', 'Peso, altura e IMC'],
-    ['medications', '✚', 'Medicamentos', 'Uso e confirmações'], ['routine', '☰', 'Rotina', 'Timeline e registros'],
+    ['documents', '▣', 'Documentos', 'Arquivos privados'], ['vaccines', '◈', 'Vacinas', 'Histórico e comprovantes'],
+    ['appointments', '◷', 'Consultas', 'Agenda e retornos'], ['growth', '↗', 'Crescimento', 'Peso e altura'],
+    ['medications', '✚', 'Medicamentos fixos', 'Uso contínuo'], ['child-data', '♥', 'Dados da criança', 'Perfil, alergias e contatos'],
+    ['users', '◉', 'Usuários e permissões', 'Pessoas autorizadas'], ['migration', '⇪', 'Importar dados antigos', 'Migração e relatório'],
     ['settings', '⚙', 'Configurações', 'OneDrive, backup e acesso']
   ];
-  return `
-    ${subPageHeading('Mais', 'Informações organizadas para quando você precisar.')}
-    <section class="menu-list">${items.map(([page, icon, title, copy]) => `<button class="menu-item" data-page="${page}"><span class="menu-item__icon">${icon}</span><span><strong>${title}</strong><small>${copy}</small></span><span class="chevron">›</span></button>`).join('')}</section>
-    <section class="demo-note"><span>☁</span><div><strong>Dados privados no OneDrive</strong><p>Os registros e anexos ficam na pasta privada da família, não no GitHub.</p></div></section>
-  `;
+  return `${subPageHeading('Mais', 'Dados usados principalmente pelos responsáveis.')}<section class="menu-list">${items.map(([page, icon, title, copy]) => `<button class="menu-item" data-page="${page}"><span class="menu-item__icon">${icon}</span><span><strong>${title}</strong><small>${copy}</small></span><span class="chevron">›</span></button>`).join('')}</section>`;
 }
 function renderDocuments() {
   const allowed = can(user.role, 'documents:view');
@@ -329,38 +255,76 @@ function renderMedications() {
 }
 
 function renderRoutine() {
-  const today = localDate();
-  return `${subPageHeading('Rotina', 'A timeline reúne tarefas, fotos e registros livres.')}
-    <section class="date-chip-row"><button class="date-chip date-chip--active">Hoje · ${formatDate(today)}</button></section>
-    <section class="section-block"><div class="section-title"><div><p class="eyebrow">Timeline</p><h2>Dia em andamento</h2></div><button class="text-button" data-page="register">Registrar</button></div><div class="timeline">${renderTimeline(today, 100)}</div></section>`;
+  return renderHistory();
 }
 
+function renderHistory() {
+  const filtered = tasksForHistory();
+  return `${subPageHeading('Histórico', 'Afazeres, fotos e observações.')}
+    <form id="history-filter-form" class="filter-panel"><label>Período<select name="period"><option value="today" ${historyFilter.period === 'today' ? 'selected' : ''}>Hoje</option><option value="yesterday" ${historyFilter.period === 'yesterday' ? 'selected' : ''}>Ontem</option><option value="week" ${historyFilter.period === 'week' ? 'selected' : ''}>Esta semana</option><option value="date" ${historyFilter.period === 'date' ? 'selected' : ''}>Escolher data</option></select></label><label>Data<input type="date" name="date" value="${historyFilter.date}"></label><label>Tipo<select name="type"><option value="">Todos</option>${taskTypes().map((type) => `<option value="${type}" ${historyFilter.type === type ? 'selected' : ''}>${type}</option>`).join('')}</select></label><button class="button button--secondary" type="submit">Filtrar</button></form>
+    <section class="section-block"><div class="section-title"><div><p class="eyebrow">${filtered.length} resultado(s)</p><h2>Afazeres</h2></div></div><div class="task-list">${filtered.map(renderDayTask).join('') || emptyState('Nenhum afazer encontrado.', 'Ajuste o filtro ou crie um afazer.', 'register')}</div></section>`;
+}
 function renderSettings() {
   return `${subPageHeading('Configurações', 'OneDrive, backup e acesso da família.')}
     <section class="settings-card"><div class="setting-line"><div><strong>Conta conectada</strong><p>${escape(renderConnectionStatus(microsoftAccount, oneDriveConfig.folderName))}</p></div><span class="status-pill status-pill--success">${escape(syncState)}</span></div></section>
-    <section class="settings-card"><div class="setting-line"><div><strong>Pasta privada</strong><p>${escape(oneDriveConfig.folderName)} · dados.json, Backup, Fotos e Anexos.</p></div><button class="button button--secondary button--small" data-action="open-onedrive">Abrir</button></div></section>
-    <section class="settings-card"><div class="setting-line"><div><strong>Sincronização</strong><p>Salva as alterações no dados.json e tenta enviar fotos pendentes.</p></div><button class="button button--secondary button--small" data-action="sync-now">Sincronizar</button></div></section>
-    <section class="settings-card"><div class="setting-line"><div><strong>Backup automático</strong><p>É criado no OneDrive, uma vez por dia, antes da próxima gravação.</p></div><button class="button button--secondary button--small" data-action="restore-backup">Restaurar</button></div></section>
-    <section class="settings-card"><div class="setting-line"><div><strong>Cópia neste aparelho</strong><p>Baixa um JSON local para conferência, sem expor dados no GitHub.</p></div><button class="button button--secondary button--small" data-action="export-backup">Baixar</button></div></section>
-    <section class="settings-card"><div class="setting-line"><div><strong>Tema</strong><p>Claro, escuro ou conforme o aparelho.</p></div><button class="button button--secondary button--small" data-action="toggle-theme">Alternar</button></div></section>
-    <section class="settings-card"><div class="setting-line"><div><strong>Conta Microsoft</strong><p>Use sair somente neste navegador; os arquivos continuam no OneDrive.</p></div><button class="button button--danger button--small" data-action="sign-out-microsoft">Sair</button></div></section>
-    <section class="settings-card"><div class="setting-line"><div><strong>Alterar conexão</strong><p>Troca o ID do aplicativo, locatário ou pasta neste aparelho.</p></div><button class="button button--secondary button--small" data-action="reconfigure-onedrive">Alterar</button></div></section>`;
+    <section class="settings-card"><div class="setting-line"><div><strong>Dados da criança</strong><p>Nome, alergias, contatos e observações fixas.</p></div><button class="button button--secondary button--small" data-page="child-data">Editar</button></div></section>
+    <section class="settings-card"><div class="setting-line"><div><strong>Sincronização</strong><p>Salva dados e tenta enviar fotos pendentes.</p></div><button class="button button--secondary button--small" data-action="sync-now">Sincronizar</button></div></section>
+    <section class="settings-card"><div class="setting-line"><div><strong>Backup</strong><p>Backup diário no OneDrive.</p></div><button class="button button--secondary button--small" data-action="restore-backup">Restaurar</button></div></section>
+    <section class="settings-card"><div class="setting-line"><div><strong>Pasta privada</strong><p>${escape(oneDriveConfig.folderName)}</p></div><button class="button button--secondary button--small" data-action="open-onedrive">Abrir</button></div></section>
+    <section class="settings-card"><div class="setting-line"><div><strong>Conta Microsoft</strong><p>Sair somente deste navegador.</p></div><button class="button button--danger button--small" data-action="sign-out-microsoft">Sair</button></div></section>`;
 }
 function renderNavigation() {
-  const tabs = [['home', '⌂', 'Início'], ['instructions', '☑', 'Orientações'], ['register', '＋', 'Registrar'], ['emergency', '⚕', 'Emergência'], ['more', '☰', 'Mais']];
-  return `<nav class="bottom-nav" aria-label="Navegação principal">${tabs.map(([page, icon, label]) => `<button class="nav-item ${currentPage === page ? 'nav-item--active' : ''} ${page === 'register' ? 'nav-item--primary' : ''}" data-page="${page}" aria-current="${currentPage === page ? 'page' : 'false'}"><span>${icon}</span><small>${label}</small></button>`).join('')}</nav>`;
+  const tabs = [['home', '⌂', 'Hoje'], ['tasks', '☑', 'Afazeres'], ['register', '＋', 'Registrar'], ['history', '◷', 'Histórico'], ['emergency', '⚕', 'Emergência']];
+  return `<nav class="bottom-nav" aria-label="Navegação principal">${tabs.map(([page, icon, label]) => `<button class="nav-item ${currentPage === page || (page === 'tasks' && currentPage === 'task-detail') ? 'nav-item--active' : ''} ${page === 'register' ? 'nav-item--primary' : ''}" data-page="${page}" aria-current="${currentPage === page ? 'page' : 'false'}"><span>${icon}</span><small>${label}</small></button>`).join('')}</nav>`;
 }
 
-function renderTask(task, canComplete) {
-  const done = isDone(task);
-  const late = !done && isLate(task);
-  return `<article class="task-card ${done ? 'task-card--done' : ''} ${late ? 'task-card--late' : ''}">
-    <div class="task-card__time">${escape(task.scheduledTime)}</div><div class="task-card__body"><div class="task-card__meta"><span class="category-tag">${escape(task.category)}</span>${task.requiresPhoto ? '<span title="Exige foto" aria-label="Exige foto">◉</span>' : ''}${task.priority === 'required' ? '<span class="required-label">Obrigatório</span>' : ''}</div><h2>${escape(task.title)}</h2><p>${escape(task.description)}</p>${task.comments?.length ? `<small>💬 ${escape(task.comments.at(-1).comment)}</small>` : ''}</div>
-    <div class="task-card__actions">${done ? '<span class="done-mark">✓</span>' : `<button class="complete-button" data-action="complete-task" data-id="${task.id}" ${canComplete ? '' : 'disabled'} aria-label="Concluir ${escape(task.title)}">✓</button>`}${task.requiresPhoto ? `<button class="photo-mini" data-action="open-photo" data-task-id="${task.id}" aria-label="Adicionar foto a ${escape(task.title)}">◉</button>` : ''}</div>
-  </article>`;
+function renderDayTask(task) {
+  const complete = isDone(task);
+  const photos = (data.dailyPhotos || []).filter((photo) => photo.taskId === task.id);
+  return `<article class="day-task ${complete ? 'day-task--done' : ''}"><button class="day-task__main" data-action="open-task" data-id="${task.id}"><time>${escape(task.scheduledTime || '--:--')}</time><span><strong>${escape(task.title)}</strong><small>${escape(task.taskType || task.category || 'Outro')}${task.familyNote ? ` · ${escape(task.familyNote)}` : ''}</small></span></button><div class="day-task__actions">${photos.length ? '<span title="Foto enviada">◉</span>' : ''}${!complete && can(user.role, 'photos:attach') ? `<button class="icon-button" data-action="open-photo" data-task-id="${task.id}" aria-label="Adicionar foto">◉</button>` : ''}${!complete && can(user.role, 'tasks:complete') ? `<button class="complete-button" data-action="complete-task" data-id="${task.id}" aria-label="Marcar como feito">✓</button>` : complete ? '<span class="done-mark">✓</span>' : ''}</div>${complete ? `<p class="day-task__done">Feito ${task.completedAt ? `às ${escape(task.completedAt.slice(11, 16))}` : ''}${task.caregiverNote ? ` · ${escape(task.caregiverNote)}` : ''}</p>` : ''}</article>`;
 }
 
-function renderTimeline(date, limit) {
+function renderTaskDetail() {
+  const task = data.dailyTasks.find((item) => item.id === selectedTaskId);
+  if (!task) return `${subPageHeading('Afazer', 'O afazer não foi encontrado.')}${emptyState('Afazer indisponível', 'Volte para a lista de hoje.', 'tasks')}`;
+  const checklist = normalizedChecklist(task);
+  const photos = (data.dailyPhotos || []).filter((photo) => photo.taskId === task.id);
+  const canWork = can(user.role, 'tasks:complete') || can(user.role, 'logs:create');
+  const canManage = can(user.role, 'tasks:create');
+  return `<section class="page-heading page-heading--sub"><button class="back-button" data-page="tasks" aria-label="Voltar">‹</button><div><p class="eyebrow">${formatDate(task.date)} · ${escape(task.scheduledTime || '--:--')}</p><h1>${escape(task.title)}</h1><p class="muted">${escape(task.taskType || task.category || 'Outro')}</p></div></section>
+    <section class="task-detail-card"><span class="status-pill ${isDone(task) ? 'status-pill--success' : 'status-pill--warning'}">${isDone(task) ? 'Concluído' : 'Pendente'}</span><h2>Orientação da família</h2><p>${escape(task.familyNote || task.description || 'Sem orientação adicional.')}</p>${task.requiresPhoto ? '<p class="task-detail-hint">Foto solicitada para este afazer.</p>' : ''}</section>
+    <section class="section-block"><div class="section-title"><div><p class="eyebrow">Passo a passo</p><h2>Checklist</h2></div></div>${checklist.length ? `<div class="checklist">${checklist.map((item, index) => `<label class="checklist__item"><input type="checkbox" data-action="toggle-checklist" data-task-id="${task.id}" data-index="${index}" ${item.checked ? 'checked' : ''} ${canWork ? '' : 'disabled'}><span>${escape(item.label)}</span></label>`).join('')}</div>` : '<p class="muted">Sem checklist para este afazer.</p>'}</section>
+    <section class="section-block"><div class="section-title"><div><p class="eyebrow">Registro de quem executou</p><h2>Observação da babá</h2></div></div><form id="task-note-form" class="form-card"><input type="hidden" name="taskId" value="${task.id}"><label>Como foi?<textarea name="caregiverNote" rows="4" ${canWork ? '' : 'disabled'} placeholder="Ex.: comeu bem, dormiu às 13:10.">${escape(task.caregiverNote || '')}</textarea></label><button class="button button--secondary button--wide" type="submit" ${canWork ? '' : 'disabled'}>Salvar observação</button></form></section>
+    ${photos.length ? `<section class="section-block"><div class="section-title"><div><p class="eyebrow">Registro visual</p><h2>Fotos</h2></div></div><div class="photo-strip">${photos.map(renderPhoto).join('')}</div></section>` : ''}
+    <section class="task-detail-actions">${can(user.role, 'photos:attach') ? `<button class="button button--secondary button--wide" data-action="open-photo" data-task-id="${task.id}">◉ Adicionar foto</button>` : ''}${!isDone(task) && can(user.role, 'tasks:complete') ? `<button class="button button--wide" data-action="complete-task" data-id="${task.id}">✓ Marcar como feito</button>` : ''}</section>
+    ${isDone(task) ? `<section class="completion-card"><strong>Concluído</strong><p>${task.completedAt ? formatDateTime(task.completedAt) : ''} · ${escape(userName(task.completedBy))}</p></section>` : ''}
+    ${canManage ? `<section class="task-management"><button class="text-button" data-action="edit-task" data-id="${task.id}">Editar afazer</button><button class="text-button text-button--danger" data-action="delete-task" data-id="${task.id}">Apagar afazer</button></section>` : ''}`;
+}
+
+function renderChildData() {
+  const canEdit = can(user.role, 'tasks:create'); const child = profile(); const doctor = data.doctors?.[0] || {};
+  const contacts = (data.emergencyContacts || []).map((item) => `${item.name || ''} | ${item.relationship || ''} | ${item.phone || ''}`).join('\n');
+  return `${subPageHeading('Dados da criança', 'Informações fixas para a família e a babá.')}<form id="child-profile-form" class="form-card"><label>Nome<input name="name" value="${escape(child.name || '')}" ${canEdit ? '' : 'disabled'} required></label><label>Data de nascimento<input name="birthDate" type="date" value="${escape(child.birthDate || '')}" ${canEdit ? '' : 'disabled'}></label><label>Foto/avatar<input name="avatar" type="file" accept="image/*" capture="environment" ${canEdit ? '' : 'disabled'}></label><label>Alergias (separadas por vírgula)<textarea name="allergies" rows="2" ${canEdit ? '' : 'disabled'}>${escape((child.allergies || []).join(', '))}</textarea></label><label>Medicamentos importantes e cuidados especiais<textarea name="criticalNotes" rows="4" ${canEdit ? '' : 'disabled'}>${escape(child.criticalNotes || '')}</textarea></label><label>Convênio<input name="healthPlan" value="${escape(child.healthPlan || '')}" ${canEdit ? '' : 'disabled'}></label><label>Endereço<input name="address" value="${escape(child.address || '')}" ${canEdit ? '' : 'disabled'}></label><div class="form-grid"><label>Pediatra<input name="doctorName" value="${escape(doctor.name || '')}" ${canEdit ? '' : 'disabled'}></label><label>Telefone do pediatra<input name="doctorPhone" value="${escape(doctor.phone || '')}" ${canEdit ? '' : 'disabled'}></label></div><label>Contatos de emergência (um por linha: Nome | Relação | Telefone)<textarea name="emergencyContacts" rows="5" ${canEdit ? '' : 'disabled'}>${escape(contacts)}</textarea></label><button class="button button--wide" type="submit" ${canEdit ? '' : 'disabled'}>Salvar dados da criança</button></form>`;
+}
+function renderUsers() {
+  const canManage = can(user.role, 'tasks:create');
+  return `${subPageHeading('Usuários e permissões', 'Contas autorizadas no dados.json.')}<div class="record-list">${(data.users || []).map((item) => `<article class="record-card"><span class="record-icon">◉</span><div><h2>${escape(item.name)}</h2><p>${escape(item.email || '')}</p><small>${escape(getRoleLabel(item.role))} · ${item.active ? 'ativo' : 'inativo'}</small></div></article>`).join('')}</div>${canManage ? `<section class="settings-card"><h2>Adicionar pessoa autorizada</h2><form id="user-form" class="form-card"><label>Nome<input name="name" required></label><label>E-mail<input type="email" name="email" required></label><label>Papel<select name="role"><option value="guardian">Responsável</option><option value="caregiver">Babá/cuidador(a)</option><option value="visitor">Visitante</option></select></label><button class="button button--wide" type="submit">Adicionar usuário</button></form></section>` : ''}`;
+}
+
+function renderMigration() {
+  const canImport = can(user.role, 'tasks:create');
+  return `${subPageHeading('Importar dados antigos', 'Importação idempotente de um pacote JSON privado.')}<section class="settings-card"><p>Selecione um pacote JSON preparado conforme o guia de migração. O app ignora itens com o mesmo ID ou caminho e registra um relatório no dados.json.</p>${canImport ? `<form id="migration-form" class="form-card"><label>Pacote de migração<input name="legacyBundle" type="file" accept="application/json,.json" required></label><button class="button button--wide" type="submit">Importar pacote</button></form>` : '<p class="permission-note">Somente responsáveis podem importar dados.</p>'}</section>${lastMigrationReport ? `<section class="settings-card"><h2>Último relatório</h2><p>${escape(migrationReportText(lastMigrationReport))}</p>${lastMigrationReport.warnings?.length ? `<p class="permission-note">${escape(lastMigrationReport.warnings.join(' '))}</p>` : ''}</section>` : ''}`;
+}
+
+function taskTypes() { return ['Medicamento', 'Lanche', 'Almoço', 'Jantar', 'Sono', 'Banho', 'Passeio', 'Brincadeira', 'Fralda', 'Sintoma', 'Observação', 'Outro']; }
+function tasksForDate(date) { return (data.dailyTasks || []).filter((task) => task.date === date).sort((a, b) => String(a.scheduledTime || '').localeCompare(String(b.scheduledTime || ''))); }
+function tasksForHistory() { const today = localDate(); const selected = historyFilter.date || today; return (data.dailyTasks || []).filter((task) => { const matchesType = !historyFilter.type || (task.taskType || task.category) === historyFilter.type; if (!matchesType) return false; if (historyFilter.period === 'today') return task.date === today; if (historyFilter.period === 'yesterday') return task.date === shiftDate(today, -1); if (historyFilter.period === 'week') return task.date >= shiftDate(today, -6) && task.date <= today; return task.date === selected; }).sort((a, b) => `${b.date}${b.scheduledTime || ''}`.localeCompare(`${a.date}${a.scheduledTime || ''}`)); }
+function shiftDate(date, days) { const value = new Date(`${date}T12:00:00`); value.setDate(value.getDate() + days); return value.toISOString().slice(0, 10); }
+function normalizedChecklist(task) { return (task.checklist || []).map((item) => typeof item === 'string' ? { label: item, checked: false } : { label: item.label || '', checked: Boolean(item.checked), checkedAt: item.checkedAt || null, checkedBy: item.checkedBy || null }); }
+function defaultChecklist(type) { return ({ Medicamento: ['Conferir nome do remédio', 'Conferir horário', 'Dar medicamento', 'Registrar se tomou tudo'], Lanche: ['Preparar lanche', 'Oferecer', 'Tirar foto', 'Registrar aceitação'], Almoço: ['Aquecer comida', 'Conferir temperatura', 'Dar almoço', 'Tirar foto do prato', 'Registrar aceitação'], Sono: ['Preparar ambiente', 'Registrar início', 'Registrar fim'], Banho: ['Separar itens', 'Dar banho', 'Registrar observação'] })[type] || []; }
+function userName(id) { return data.users?.find((item) => item.id === id)?.name || 'Usuário autorizado'; }
+function formatDateTime(value) { return new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(value)); }
+ {
   const taskEvents = data.dailyTasks.filter((task) => task.date === date && (isDone(task) || task.status === 'pending')).map((task) => ({ time: task.completedAt?.slice(11, 16) || task.scheduledTime, type: isDone(task) ? 'Tarefa concluída' : 'Tarefa pendente', description: task.title, icon: isDone(task) ? '✓' : '○', state: isDone(task) ? 'done' : 'pending' }));
   const logEvents = data.dailyLogs.filter((log) => log.date === date).map((log) => ({ time: log.time, type: log.type, description: log.description, icon: iconFor(log.type), state: log.isImportant ? 'important' : 'normal' }));
   const photoEvents = data.dailyPhotos.filter((photo) => photo.date === date).map((photo) => ({ time: photo.uploadedAt.slice(11, 16), type: 'Foto', description: photo.caption || photo.category, icon: '◉', state: 'normal', photo }));
@@ -419,7 +383,7 @@ function iconFor(type) { return ({ alimentação: '◌', sono: '☾', medicament
 document.addEventListener('click', async (event) => {
   const control = event.target.closest('[data-page], [data-quick], [data-register-type], [data-action]');
   if (!control || control.disabled) return;
-  if (control.dataset.page) { currentPage = control.dataset.page; render(); window.scrollTo({ top: 0, behavior: 'smooth' }); return; }
+  if (control.dataset.page) { currentPage = control.dataset.page; if (currentPage !== 'task-detail') selectedTaskId = null; render(); window.scrollTo({ top: 0, behavior: 'smooth' }); return; }
   if (control.dataset.quick) { selectedRegisterType = control.dataset.quick; currentPage = 'register'; render(); return; }
   if (control.dataset.registerType) { selectedRegisterType = control.dataset.registerType; render(); return; }
   try {
@@ -428,57 +392,109 @@ document.addEventListener('click', async (event) => {
       case 'toggle-theme': toggleTheme(); break;
       case 'microsoft-login': await signInMicrosoft(); break;
       case 'sign-out-microsoft': await signOutMicrosoft(); break;
-      case 'reconfigure-onedrive':
-        if (window.confirm('Alterar a conexão neste aparelho? Os dados já salvos no OneDrive não serão apagados.')) {
-          clearOneDriveConfig();
-          resetLocalCache();
-          window.location.reload();
-        }
-        break;
+      case 'reconfigure-onedrive': if (window.confirm('Alterar a conexão neste aparelho? Os dados no OneDrive não serão apagados.')) { clearOneDriveConfig(); resetLocalCache(); window.location.reload(); } break;
       case 'sync-now': await syncNow(); notify('Sincronização concluída.'); break;
       case 'open-onedrive': window.open(await getRootWebUrl(), '_blank', 'noopener'); break;
       case 'open-document': window.open(await getFileUrl(control.dataset.path), '_blank', 'noopener'); break;
       case 'restore-backup': await restoreBackupFromPrompt(); break;
-      case 'confirm-reading': confirmReading(); break;
+      case 'open-task': selectedTaskId = control.dataset.id; currentPage = 'task-detail'; render(); window.scrollTo({ top: 0, behavior: 'smooth' }); break;
+      case 'toggle-checklist': toggleTaskChecklist(control.dataset.taskId, Number(control.dataset.index), control.checked); break;
       case 'complete-task': completeTask(control.dataset.id); break;
+      case 'edit-task': openTaskEditor(control.dataset.id); break;
+      case 'delete-task': deleteTask(control.dataset.id); break;
       case 'open-photo': openPhotoModal(control.dataset.taskId || ''); break;
       case 'close-modal': document.querySelector('#modal-root').innerHTML = ''; break;
       case 'print-report': if (!printDailyReport(data, localDate())) notify('O navegador bloqueou a janela do relatório.', 'error'); break;
-      case 'export-backup': exportBackup(data); notify('Cópia local baixada. O backup automático fica no OneDrive.'); break;
+      case 'export-backup': exportBackup(data); notify('Cópia local baixada.'); break;
     }
   } catch (error) { notify(error.message, 'error'); }
 });
-
 document.addEventListener('submit', async (event) => {
   event.preventDefault();
   try {
-    if (event.target.id === 'onedrive-setup-form') {
-      const formData = new FormData(event.target);
-      saveOneDriveConfig({ clientId: formData.get('clientId'), tenantId: formData.get('tenantId'), folderName: formData.get('folderName') });
-      window.location.reload();
-      return;
-    }
+    if (event.target.id === 'onedrive-setup-form') { const formData = new FormData(event.target); saveOneDriveConfig({ clientId: formData.get('clientId'), tenantId: formData.get('tenantId'), folderName: formData.get('folderName') }); window.location.reload(); return; }
+    if (event.target.id === 'task-form') await saveTask(event.target);
     if (event.target.id === 'quick-form') await saveQuickRecord(event.target);
+    if (event.target.id === 'task-note-form') saveTaskNote(event.target);
     if (event.target.id === 'photo-form') await savePhotoRecord(event.target);
     if (event.target.id === 'attachment-form') await saveAttachment(event.target);
+    if (event.target.id === 'child-profile-form') await saveChildProfile(event.target);
+    if (event.target.id === 'user-form') saveUser(event.target);
+    if (event.target.id === 'migration-form') await importMigrationBundle(event.target);
+    if (event.target.id === 'history-filter-form') saveHistoryFilter(event.target);
   } catch (error) { notify(error.message, 'error'); }
 });
-async function saveQuickRecord(form) {
-  if (!can(user.role, 'logs:create')) return notify('Seu perfil não pode criar registros.', 'error');
-  const formData = new FormData(form);
-  const type = formData.get('type');
-  const description = formData.get('description').trim();
-  if (!description) return notify('Descreva o registro antes de salvar.', 'error');
-  if (type === 'tarefa' && formData.get('taskId')) completeTask(formData.get('taskId'), description);
-  if (type === 'foto') {
-    const file = formData.get('photo');
-    if (!file?.size) return notify('Escolha uma foto para este registro.', 'error');
-    await createPhoto({ file, caption: description, category: 'Registro livre' });
-  }
-  addRecord('dailyLogs', { date: localDate(), time: formData.get('time'), type, description, mood: '', symptoms: formData.get('symptoms') || '', fileUrl: null, isImportant: formData.get('important') === 'on' }, user.id);
-  currentPage = 'routine'; render(); notify('Registro salvo no feed de hoje.');
+async function saveTask(form) {
+  if (!can(user.role, 'tasks:create')) throw new Error('Seu perfil não pode criar ou editar afazeres.');
+  const values = new FormData(form); const taskId = values.get('taskId'); const taskType = String(values.get('taskType') || 'Outro');
+  const checklistText = String(values.get('checklistText') || '').trim();
+  const checklist = (checklistText ? checklistText.split(/\r?\n/) : defaultChecklist(taskType)).map((label) => ({ label: String(label).trim(), checked: false })).filter((item) => item.label);
+  const record = { date: String(values.get('date')), scheduledTime: String(values.get('scheduledTime')), taskType, category: taskType.toLowerCase(), title: String(values.get('title')).trim(), description: String(values.get('familyNote') || '').trim(), familyNote: String(values.get('familyNote') || '').trim(), checklist, requiresPhoto: values.get('requiresPhoto') === 'on', priority: 'normal', status: 'pending', comments: [] };
+  if (!record.title || !record.date || !record.scheduledTime) throw new Error('Informe data, horário e título do afazer.');
+  if (taskId) { const previous = data.dailyTasks.find((item) => item.id === taskId); updateRecord('dailyTasks', taskId, { ...record, status: previous?.status || 'pending', completedAt: previous?.completedAt || null, completedBy: previous?.completedBy || null, caregiverNote: previous?.caregiverNote || '' }, user.id); selectedTaskId = taskId; currentPage = 'task-detail'; }
+  else { addRecord('dailyTasks', record, user.id); currentPage = 'home'; }
+  document.querySelector('#modal-root').innerHTML = ''; render(); notify(taskId ? 'Afazer atualizado.' : 'Afazer adicionado ao dia.');
 }
 
+function saveTaskNote(form) {
+  const values = new FormData(form); const taskId = String(values.get('taskId')); const note = String(values.get('caregiverNote') || '').trim();
+  if (!can(user.role, 'tasks:complete') && !can(user.role, 'logs:create')) throw new Error('Seu perfil não pode registrar observações.');
+  updateRecord('dailyTasks', taskId, { caregiverNote: note, caregiverNoteAt: new Date().toISOString(), caregiverNoteBy: user.id }, user.id); render(); notify('Observação salva.');
+}
+
+function toggleTaskChecklist(taskId, index, checked) {
+  if (!can(user.role, 'tasks:complete') && !can(user.role, 'logs:create')) return notify('Seu perfil não pode atualizar o checklist.', 'error');
+  const task = data.dailyTasks.find((item) => item.id === taskId); if (!task) return;
+  const checklist = normalizedChecklist(task); if (!checklist[index]) return;
+  checklist[index] = { ...checklist[index], checked, checkedAt: checked ? new Date().toISOString() : null, checkedBy: checked ? user.id : null };
+  updateRecord('dailyTasks', taskId, { checklist }, user.id); render();
+}
+
+function openTaskEditor(id) {
+  if (!can(user.role, 'tasks:create')) return notify('Seu perfil não pode editar afazeres.', 'error');
+  const task = data.dailyTasks.find((item) => item.id === id); if (!task) return;
+  document.querySelector('#modal-root').innerHTML = `<div class="modal-backdrop" data-action="close-modal"><section class="modal" role="dialog" aria-modal="true" onclick="event.stopPropagation()"><button class="modal__close" data-action="close-modal" aria-label="Fechar">×</button><h2>Editar afazer</h2><form id="task-form"><input type="hidden" name="taskId" value="${task.id}"><label>Data<input name="date" type="date" value="${escape(task.date)}" required></label><div class="form-grid"><label>Horário<input name="scheduledTime" type="time" value="${escape(task.scheduledTime)}" required></label><label>Tipo<select name="taskType">${taskTypes().map((type) => `<option value="${type}" ${(task.taskType || task.category) === type ? 'selected' : ''}>${type}</option>`).join('')}</select></label></div><label>Título<input name="title" value="${escape(task.title)}" required></label><label>Orientação da família<textarea name="familyNote" rows="4">${escape(task.familyNote || task.description || '')}</textarea></label><label>Checklist (um item por linha)<textarea name="checklistText" rows="5">${escape(normalizedChecklist(task).map((item) => item.label).join('\n'))}</textarea></label><label class="check-row"><input type="checkbox" name="requiresPhoto" ${task.requiresPhoto ? 'checked' : ''}> Solicitar foto</label><button class="button button--wide" type="submit">Salvar alterações</button></form></section></div>`;
+}
+
+function deleteTask(id) {
+  if (!can(user.role, 'tasks:create')) return notify('Seu perfil não pode apagar afazeres.', 'error');
+  const task = data.dailyTasks.find((item) => item.id === id); if (!task) return;
+  if (!window.confirm(`Apagar o afazer "${task.title}"? Esta ação não pode ser desfeita.`)) return;
+  removeRecord('dailyTasks', id, user.id); selectedTaskId = null; currentPage = 'tasks'; render(); notify('Afazer apagado.');
+}
+
+async function saveChildProfile(form) {
+  if (!can(user.role, 'tasks:create')) throw new Error('Seu perfil não pode editar os dados da criança.');
+  const values = new FormData(form); const updated = { ...profile(), name: String(values.get('name')).trim(), birthDate: String(values.get('birthDate') || ''), allergies: String(values.get('allergies') || '').split(',').map((item) => item.trim()).filter(Boolean), criticalNotes: String(values.get('criticalNotes') || '').trim(), healthPlan: String(values.get('healthPlan') || '').trim(), address: String(values.get('address') || '').trim() };
+  const contactLines = String(values.get('emergencyContacts') || '').split(/\r?\n/).map((line) => line.split('|').map((part) => part.trim())).filter((parts) => parts[0]);
+  data.emergencyContacts = contactLines.map((parts, index) => ({ id: data.emergencyContacts?.[index]?.id || `contact-${crypto.randomUUID()}`, name: parts[0], relationship: parts[1] || 'Contato', phone: parts[2] || '', whatsapp: parts[2] || '', priority: index + 1, notes: '' }));
+  const doctorName = String(values.get('doctorName') || '').trim(); const doctorPhone = String(values.get('doctorPhone') || '').trim();
+  if (doctorName || doctorPhone) data.doctors = [{ ...(data.doctors?.[0] || { id: `doctor-${crypto.randomUUID()}`, specialty: 'Pediatria', clinic: '', address: '', notes: '' }), name: doctorName, phone: doctorPhone, specialty: 'Pediatria' }];
+  const avatar = values.get('avatar'); if (avatar?.size) { const compressed = await resizeImage(avatar, 512, 0.8); const filePath = `Anexos/Perfil/avatar_${Date.now()}.jpg`; await uploadFile(filePath, compressed.blob, 'image/jpeg'); updated.photoUrl = compressed.thumbnailUrl; updated.avatarPath = filePath; }
+  data.childProfile = updated; saveData(data); render(); notify('Dados da criança atualizados.');
+}
+function saveUser(form) {
+  if (!can(user.role, 'tasks:create')) throw new Error('Seu perfil não pode adicionar usuários.');
+  const values = new FormData(form); const email = String(values.get('email')).trim().toLowerCase();
+  if ((data.users || []).some((item) => item.email?.toLowerCase() === email)) throw new Error('Este e-mail já está cadastrado.');
+  addRecord('users', { name: String(values.get('name')).trim(), email, role: String(values.get('role')), phone: '', active: true }, user.id); render(); notify('Usuário autorizado adicionado.');
+}
+
+async function importMigrationBundle(form) {
+  if (!can(user.role, 'tasks:create')) throw new Error('Seu perfil não pode importar dados.');
+  const file = new FormData(form).get('legacyBundle'); if (!file?.size) throw new Error('Selecione um pacote JSON.');
+  const bundle = JSON.parse(await file.text()); lastMigrationReport = importLegacyBundle(data, bundle, user.id); saveData(data); render(); notify(lastMigrationReport.skipped ? 'Este pacote já tinha sido importado.' : 'Importação concluída.');
+}
+
+function saveHistoryFilter(form) { const values = new FormData(form); historyFilter = { period: String(values.get('period')), date: String(values.get('date') || localDate()), type: String(values.get('type') || '') }; render(); }
+async function saveQuickRecord(form) {
+  if (!can(user.role, 'logs:create')) return notify('Seu perfil não pode criar registros.', 'error');
+  const formData = new FormData(form); const type = String(formData.get('type') || 'Observação'); const description = String(formData.get('description') || '').trim();
+  if (!description) return notify('Escreva uma observação antes de salvar.', 'error');
+  const file = formData.get('photo'); if (file?.size) await createPhoto({ file, caption: description, category: type });
+  addRecord('dailyLogs', { date: localDate(), time: String(formData.get('time') || currentTime()), type, description, mood: '', symptoms: '', fileUrl: null, isImportant: false }, user.id);
+  currentPage = 'home'; render(); notify('Registro salvo.');
+}
 function confirmReading() {
   const instruction = data.dailyInstructions.find((item) => item.date === localDate());
   if (!instruction || !can(user.role, 'instructions:confirm')) return notify('Seu perfil não pode confirmar a leitura.', 'error');
@@ -488,14 +504,11 @@ function confirmReading() {
 
 function completeTask(id, comment = '') {
   if (!can(user.role, 'tasks:complete')) return notify('Seu perfil não pode concluir tarefas.', 'error');
-  const task = data.dailyTasks.find((item) => item.id === id);
-  if (!task) return;
-  const status = isLate(task) ? 'late' : 'completed';
+  const task = data.dailyTasks.find((item) => item.id === id); if (!task) return;
   const comments = comment ? [...(task.comments || []), { userId: user.id, comment, createdAt: new Date().toISOString() }] : task.comments || [];
-  updateRecord('dailyTasks', id, { status, completedBy: user.id, completedAt: new Date().toISOString(), comments }, user.id);
-  render(); notify(status === 'late' ? 'Tarefa marcada como feita com atraso.' : 'Tarefa concluída.');
+  updateRecord('dailyTasks', id, { status: 'completed', completedBy: user.id, completedAt: new Date().toISOString(), comments }, user.id);
+  render(); notify('Afazer marcado como feito.');
 }
-
 function openPhotoModal(taskId) {
   if (!can(user.role, 'photos:attach')) return notify('Seu perfil não pode enviar fotos.', 'error');
   const task = data.dailyTasks.find((item) => item.id === taskId);
