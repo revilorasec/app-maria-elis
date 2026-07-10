@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Cuidado em família">
+  <rect width="512" height="512" rx="112" fill="#2f6f66"/>
+  <path d="M256 412S102 320 102 201c0-48 39-87 87-87 31 0 54 16 67 39 13-23 36-39 67-39 48 0 87 39 87 87 0 119-154 211-154 211z" fill="#fff4eb"/>
+  <circle cx="256" cy="233" r="53" fill="#f4aa87"/>
+  <path d="M201 233c1-56 29-84 58-84 35 0 60 28 55 87-30-18-71-20-113-3z" fill="#775247"/>
+</svg>

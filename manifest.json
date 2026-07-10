@@ -1,0 +1,14 @@
+{
+  "name": "App Maria Elis",
+  "short_name": "Maria Elis",
+  "description": "PWA privado para rotina, saúde e orientações, com dados no OneDrive.",
+  "lang": "pt-BR",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f6faf7",
+  "theme_color": "#2f6f66",
+  "icons": [
+    { "src": "assets/icons/app-icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}
