@@ -1,4 +1,4 @@
-import { loadData, addRecord, updateRecord, removeRecord, saveData, resetLocalCache, localDate, setPersistence, flushPersistence } from './services/dataService.js?v=9';
+import { loadData, addRecord, updateRecord, removeRecord, saveData, resetLocalCache, localDate, setPersistence, flushPersistence } from './services/dataService.js?v=11';
 import { can, getRoleLabel } from './services/permissionsService.js';
 import { notify, offlineNotice } from './services/notificationService.js';
 import { lineChart, donutChart } from './services/chartService.js';
@@ -219,14 +219,15 @@ function renderDocuments() {
 }
 function renderVaccines() {
   const allowed = can(user.role, 'vaccines:view');
-  if (!allowed) return restrictedPage('Vacinas', 'O histórico completo de vacinação é visível somente a responsáveis autorizados.');
-  const applied = data.vaccines.filter((item) => item.status === 'applied').length;
-  return `${subPageHeading('Vacinas', 'Histórico, comprovantes privados e alertas.')}
-    <section class="metric-row"><article class="metric-card"><strong>${applied}</strong><span>aplicadas</span></article><article class="metric-card metric-card--warning"><strong>${data.vaccines.length - applied}</strong><span>pendentes</span></article></section>
-    <section class="chart-card"><div class="section-title"><div><p class="eyebrow">Situação</p><h2>Aplicadas x pendentes</h2></div></div>${donutChart({ completed: applied, pending: data.vaccines.length - applied })}</section>
-    <div class="record-list">${data.vaccines.map((vaccine) => `<article class="record-card"><span class="record-icon">◈</span><div><span class="status-pill ${statusClass(vaccine.status)}">${statusLabel(vaccine.status)}</span><h2>${escape(vaccine.name)}</h2><p>${escape(vaccine.dose)} · ${formatDate(vaccine.expectedDate)}</p><small>${vaccine.appliedDate ? `Aplicada em ${formatDate(vaccine.appliedDate)}` : 'Sem comprovante no protótipo'}</small></div></article>`).join('')}</div>`;
+  if (!allowed) return restrictedPage('Vacinas', 'O histórico de vacinação é visível somente para responsáveis autorizados.');
+  const canManage = can(user.role, 'tasks:create');
+  const records = [...(data.vaccines || [])].sort((a, b) => String(b.appliedDate || b.expectedDate || '').localeCompare(String(a.appliedDate || a.expectedDate || '')));
+  const examples = records.filter(isExampleVaccine);
+  return `${subPageHeading('Vacinas', 'Histórico, lotes e comprovantes privados.')}
+    ${canManage ? `<section class="settings-card"><div class="section-title"><div><p class="eyebrow">Responsáveis</p><h2>Adicionar vacina</h2></div></div><form id="vaccine-form" class="form-card"><label>Data da aplicação<input name="appliedDate" type="date" value="${localDate()}" required></label><div class="form-grid"><label>Vacina<input name="name" required placeholder="Ex.: Varicela"></label><label>Dose<input name="dose" required placeholder="Ex.: 2º ou Reforço"></label></div><div class="form-grid"><label>Lote<input name="batch" placeholder="Se disponível"></label><label>Local<input name="location" placeholder="Posto ou clínica"></label></div><label>Observação<textarea name="notes" rows="2" placeholder="Reação, orientação ou observação"></textarea></label><label>Comprovantes/fotos<input name="proofs" type="file" accept="image/*,application/pdf" multiple></label><button class="button button--wide" type="submit">Salvar vacina</button></form></section>` : ''}
+    ${canManage && examples.length ? `<button class="button button--danger button--wide" data-action="clear-example-vaccines">Apagar ${examples.length} vacina(s) de exemplo</button>` : ''}
+    <section class="section-block"><div class="section-title"><div><p class="eyebrow">${records.length} registro(s)</p><h2>Histórico</h2></div></div><div class="record-list">${records.map((vaccine) => { const proofPaths = vaccine.proofFilePaths || []; const expected = Number(vaccine.proofExpectedCount || 0); return `<article class="record-card"><span class="record-icon">◈</span><div><span class="status-pill ${statusClass(vaccine.status || 'applied')}">${statusLabel(vaccine.status || 'applied')}</span><h2>${escape(vaccine.name)}</h2><p>${escape(vaccine.dose)} · ${vaccine.appliedDate ? formatDate(vaccine.appliedDate) : 'Data não informada'}</p><small>${vaccine.batch ? `Lote: ${escape(vaccine.batch)}` : 'Lote não informado'}</small>${vaccine.notes ? `<small class="record-detail">${escape(vaccine.notes)}</small>` : ''}${proofPaths.length ? `<div class="inline-actions">${proofPaths.map((proof, index) => `<button class="text-button" data-action="open-vaccine-proof" data-path="${escape(proof)}">Abrir comprovante ${index + 1}</button>`).join('')}</div>` : expected ? `<small class="record-detail">${expected} comprovante(s) aguardando envio</small>` : ''}</div>${canManage ? `<div class="record-card__actions"><button class="icon-button" data-action="edit-vaccine" data-id="${vaccine.id}" aria-label="Editar vacina">✎</button><button class="icon-button" data-action="delete-vaccine" data-id="${vaccine.id}" aria-label="Apagar vacina">×</button></div>` : ''}</article>`; }).join('') || emptyState('Nenhuma vacina cadastrada.', 'Adicione ou importe o histórico privado.', '')}</div></section>`;
 }
-
 function renderAppointments() {
   const allowed = can(user.role, 'appointments:view');
   if (!allowed) return restrictedPage('Consultas', 'Consultas e orientações médicas são restritas por padrão para cuidadores e visitantes.');
@@ -397,6 +398,10 @@ document.addEventListener('click', async (event) => {
       case 'sync-now': await syncNow(); notify('Sincronização concluída.'); break;
       case 'open-onedrive': window.open(await getRootWebUrl(), '_blank', 'noopener'); break;
       case 'open-document': window.open(await getFileUrl(control.dataset.path), '_blank', 'noopener'); break;
+      case 'open-vaccine-proof': window.open(await getFileUrl(control.dataset.path), '_blank', 'noopener'); break;
+      case 'edit-vaccine': openVaccineEditor(control.dataset.id); break;
+      case 'delete-vaccine': deleteVaccine(control.dataset.id); break;
+      case 'clear-example-vaccines': clearExampleVaccines(); break;
       case 'restore-backup': await restoreBackupFromPrompt(); break;
       case 'open-task': selectedTaskId = control.dataset.id; currentPage = 'task-detail'; render(); window.scrollTo({ top: 0, behavior: 'smooth' }); break;
       case 'toggle-checklist': toggleTaskChecklist(control.dataset.taskId, Number(control.dataset.index), control.checked); break;
@@ -422,6 +427,7 @@ document.addEventListener('submit', async (event) => {
     if (event.target.id === 'child-profile-form') await saveChildProfile(event.target);
     if (event.target.id === 'user-form') saveUser(event.target);
     if (event.target.id === 'migration-form') await importMigrationBundle(event.target);
+    if (event.target.id === 'vaccine-form') await saveVaccine(event.target);
     if (event.target.id === 'history-filter-form') saveHistoryFilter(event.target);
   } catch (error) { notify(error.message, 'error'); }
 });
@@ -605,6 +611,40 @@ async function restoreBackupFromPrompt() {
   notify('Backup restaurado e salvo como dados.json.');
 }
 
+async function saveVaccine(form) {
+  if (!can(user.role, 'tasks:create')) throw new Error('Seu perfil não pode alterar vacinas.');
+  const values = new FormData(form); const vaccineId = String(values.get('vaccineId') || ''); const appliedDate = String(values.get('appliedDate') || '');
+  const current = vaccineId ? data.vaccines.find((item) => item.id === vaccineId) : null;
+  if (!appliedDate || !String(values.get('name') || '').trim() || !String(values.get('dose') || '').trim()) throw new Error('Informe data, vacina e dose.');
+  const proofPaths = [...(current?.proofFilePaths || [])];
+  for (const file of values.getAll('proofs')) { if (!file?.size) continue; const path = vaccineProofPath(file.name, appliedDate); await uploadFile(path, file, file.type || 'application/octet-stream'); proofPaths.push(path); }
+  const record = { name: String(values.get('name')).trim(), dose: String(values.get('dose')).trim(), appliedDate, expectedDate: appliedDate, batch: String(values.get('batch') || '').trim(), location: String(values.get('location') || '').trim(), notes: String(values.get('notes') || '').trim(), status: 'applied', proofFilePaths: proofPaths, proofExpectedCount: current?.proofExpectedCount || 0, proofStatus: proofPaths.length >= Number(current?.proofExpectedCount || 0) && proofPaths.length ? 'uploaded' : (current?.proofStatus || 'none') };
+  if (current) updateRecord('vaccines', current.id, record, user.id); else addRecord('vaccines', record, user.id);
+  document.querySelector('#modal-root').innerHTML = ''; render(); notify('Vacina salva.');
+}
+
+function openVaccineEditor(id) {
+  if (!can(user.role, 'tasks:create')) return notify('Seu perfil não pode editar vacinas.', 'error');
+  const vaccine = data.vaccines.find((item) => item.id === id); if (!vaccine) return;
+  document.querySelector('#modal-root').innerHTML = `<div class="modal-backdrop" data-action="close-modal"><section class="modal" role="dialog" aria-modal="true" onclick="event.stopPropagation()"><button class="modal__close" data-action="close-modal" aria-label="Fechar">×</button><h2>Editar vacina</h2><form id="vaccine-form"><input type="hidden" name="vaccineId" value="${vaccine.id}"><label>Data da aplicação<input name="appliedDate" type="date" value="${escape(vaccine.appliedDate || '')}" required></label><div class="form-grid"><label>Vacina<input name="name" value="${escape(vaccine.name)}" required></label><label>Dose<input name="dose" value="${escape(vaccine.dose)}" required></label></div><div class="form-grid"><label>Lote<input name="batch" value="${escape(vaccine.batch || '')}"></label><label>Local<input name="location" value="${escape(vaccine.location || '')}"></label></div><label>Observação<textarea name="notes" rows="3">${escape(vaccine.notes || '')}</textarea></label><label>Adicionar comprovantes<input name="proofs" type="file" accept="image/*,application/pdf" multiple></label><button class="button button--wide" type="submit">Salvar alterações</button></form></section></div>`;
+}
+
+function deleteVaccine(id) {
+  if (!can(user.role, 'tasks:create')) return notify('Seu perfil não pode apagar vacinas.', 'error');
+  const vaccine = data.vaccines.find((item) => item.id === id); if (!vaccine) return;
+  if (!window.confirm(`Apagar ${vaccine.name} (${vaccine.dose})?`)) return;
+  removeRecord('vaccines', id, user.id); render(); notify('Vacina apagada.');
+}
+
+function clearExampleVaccines() {
+  if (!can(user.role, 'tasks:create')) return notify('Seu perfil não pode apagar vacinas.', 'error');
+  const examples = data.vaccines.filter(isExampleVaccine); if (!examples.length) return notify('Não há vacinas de exemplo.');
+  if (!window.confirm(`Apagar ${examples.length} vacina(s) de exemplo?`)) return;
+  examples.forEach((item) => removeRecord('vaccines', item.id, user.id)); render(); notify('Vacinas de exemplo apagadas.');
+}
+
+function isExampleVaccine(vaccine) { return String(vaccine.id || '').startsWith('vac-demo') || /exemplo/i.test(`${vaccine.name || ''} ${vaccine.notes || ''}`); }
+function vaccineProofPath(fileName, date) { const [year, month] = date.split('-'); return `Anexos/Vacinas/${year}/${month}/${date}_${safeFileName(fileName)}`; }
 async function saveAttachment(form) {
   if (!can(user.role, 'documents:create')) throw new Error('Seu perfil não pode enviar documentos.');
   const formData = new FormData(form);
@@ -661,6 +701,6 @@ function bindConnectivity() {
   window.addEventListener('offline', update);
 }
 function registerServiceWorker() {
-  if ('serviceWorker' in navigator) navigator.serviceWorker.register('./service-worker.js?v=9').catch(() => {});
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('./service-worker.js?v=11').catch(() => {});
 }
 
