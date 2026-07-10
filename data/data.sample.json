@@ -1,7 +1,7 @@
 {
   "childProfile": {
-    "id": "child-demo-001",
-    "name": "Criança Exemplo",
+    "id": "child-maria-elis",
+    "name": "Maria Elis",
     "birthDate": "2024-04-18",
     "photoUrl": "assets/icons/child-avatar.svg",
     "healthPlan": "Plano demonstrativo",
@@ -67,7 +67,7 @@
   ],
   "attachments": [],
   "auditLog": [
-    { "id": "audit-demo-1", "userId": "user-admin", "action": "seeded", "entityType": "demo", "entityId": "child-demo-001", "oldValue": null, "newValue": "Dados fictícios carregados", "createdAt": "2026-07-09T07:00:00Z" }
+    { "id": "audit-demo-1", "userId": "user-admin", "action": "seeded", "entityType": "demo", "entityId": "child-maria-elis", "oldValue": null, "newValue": "Dados fictícios carregados", "createdAt": "2026-07-09T07:00:00Z" }
   ],
   "settings": [
     { "id": "setting-theme", "key": "theme", "value": "system", "updatedAt": "2026-07-09T07:00:00Z" }
