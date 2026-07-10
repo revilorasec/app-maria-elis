@@ -661,6 +661,6 @@ function bindConnectivity() {
   window.addEventListener('offline', update);
 }
 function registerServiceWorker() {
-  if ('serviceWorker' in navigator) navigator.serviceWorker.register('./service-worker.js').catch(() => {});
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('./service-worker.js?v=8').catch(() => {});
 }
 
