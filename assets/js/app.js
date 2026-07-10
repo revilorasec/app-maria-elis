@@ -155,7 +155,7 @@ function renderHome() {
     </section>
 
     <section class="hero-card">
-      <div class="hero-card__copy"><span class="status-pill status-pill--soft">${escape(ageFrom(profile().birthDate))}</span><h2>${escape(profile().name)}</h2><p>${escape(sessionSummary(user))}</p></div>
+      <div class="hero-card__copy"><span class="status-pill status-pill--soft">${escape(ageFrom(profile().birthDate))}</span><h2>${escape(profile().name)}</h2><p>${escape(connectionSummary(user))}</p></div>
       <img src="${escape(profile().photoUrl)}" alt="Avatar ilustrativo da criança" class="hero-card__avatar">
     </section>
 
@@ -402,6 +402,10 @@ function isDone(task) { return task.status === 'completed' || task.status === 'l
 function isLate(task) { return task.date === localDate() && task.scheduledTime < currentTime() && task.status === 'pending'; }
 function currentTime() { return new Date().toTimeString().slice(0, 5); }
 function firstName(name) { return name.split(' ')[0]; }
+function connectionSummary(currentUser) {
+  const accountName = microsoftAccount?.username || currentUser.email || 'Conta Microsoft';
+  return `${getRoleLabel(currentUser.role)} · ${accountName} · OneDrive conectado`;
+}
 function initials(name) { return name.split(' ').slice(0, 2).map((item) => item[0]).join('').toUpperCase(); }
 function phoneHref(value = '') { return value.replace(/\D/g, ''); }
 function escape(value = '') { return String(value).replace(/[&<>"]/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[character])); }

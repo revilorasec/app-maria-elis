@@ -40,7 +40,7 @@ export async function initializeMicrosoftSession() {
     auth: {
       clientId: config.clientId,
       authority: `https://login.microsoftonline.com/${config.tenantId}`,
-      redirectUri: `${location.origin}${location.pathname}`
+      redirectUri: `${window.location.origin}${window.location.pathname}`
     },
     cache: { cacheLocation: 'localStorage' }
   });
