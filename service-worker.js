@@ -1,4 +1,4 @@
-const CACHE_NAME = 'maria-onedrive-shell-v3';
+const CACHE_NAME = 'maria-onedrive-shell-v4';
 const APP_SHELL = [
   './', './index.html', './manifest.json', './assets/css/styles.css', './assets/js/app.js',
   './assets/js/auth.js', './assets/js/graph.js', './assets/js/storage.js', './assets/js/photos.js', './assets/js/ui.js',
