@@ -1,15 +1,16 @@
-import { loadData, loadInitialData, getPendingChanges, preserveLegacyPendingNamespace, addRecord, updateRecord, removeRecord, saveData, resetLocalCache, localDate, setPersistence, flushPersistence, setDataNamespace, setDataBaseVersion, hasPendingChanges } from './services/dataService.js?v=15';
-import { can, getRoleLabel } from './services/permissionsService.js?v=15';
-import { notify, offlineNotice } from './services/notificationService.js?v=15';
-import { lineChart, donutChart } from './services/chartService.js?v=15';
-import { exportBackup, printDailyReport } from './services/reportService.js?v=15';
-import { clearOneDriveConfig, initializeMicrosoftSession, saveOneDriveConfig, signInMicrosoft, signOutMicrosoft } from './auth.js?v=15';
-import { backupDB, connectOneDrive, deleteFile, downloadFile, getDBVersion, getFileUrl, getRootWebUrl, getStorageIdentity, listFiles, loadDB, readJsonFile, restoreDB, saveDB, uploadFile, writeJsonFile } from './storage.js?v=15';
-import { eventPhotoPath, listPendingPhotos, queuePendingPhoto, removePendingPhoto, resizeImage } from './photos.js?v=15';
-import { renderConnectionStatus } from './ui.js?v=15';
-import { importLegacyBundle, migrationReportText } from './migration.js?v=15';
-import { extractLegacyPrivateCaregiverData, hasLegacyPrivateCaregiverData, migrateSchemaV2 } from './schemaMigration.js?v=15';
-import { connectAdminArea, DEFAULT_ADMIN_FOLDER, deleteAdminPath, getAdminFileUrl, saveAdminData, uploadAdminFile } from './adminStorage.js?v=15';
+import { loadData, loadInitialData, getPendingChanges, preserveLegacyPendingNamespace, addRecord, updateRecord, removeRecord, saveData, resetLocalCache, localDate, setPersistence, flushPersistence, setDataNamespace, setDataBaseVersion, hasPendingChanges } from './services/dataService.js?v=16';
+import { can, getRoleLabel } from './services/permissionsService.js?v=16';
+import { clearDeviceBinding, clearFailedAttempts, createPinHash, getDeviceBinding, isAttemptBlocked, registerFailedAttempt, remainingBlockMinutes, saveDeviceBinding, setDeviceLocked, validPin, verifyPin } from './services/deviceAccessService.js?v=16';
+import { notify, offlineNotice } from './services/notificationService.js?v=16';
+import { lineChart, donutChart } from './services/chartService.js?v=16';
+import { exportBackup, printDailyReport } from './services/reportService.js?v=16';
+import { clearOneDriveConfig, initializeMicrosoftSession, saveOneDriveConfig, signInMicrosoft, signOutMicrosoft } from './auth.js?v=16';
+import { backupDB, connectOneDrive, deleteFile, downloadFile, getDBVersion, getFileUrl, getRootWebUrl, getStorageIdentity, listFiles, loadDB, readJsonFile, restoreDB, saveDB, uploadFile, writeJsonFile } from './storage.js?v=16';
+import { eventPhotoPath, listPendingPhotos, queuePendingPhoto, removePendingPhoto, resizeImage } from './photos.js?v=16';
+import { renderConnectionStatus } from './ui.js?v=16';
+import { importLegacyBundle, migrationReportText } from './migration.js?v=16';
+import { extractLegacyPrivateCaregiverData, hasLegacyPrivateCaregiverData, migrateSchemaV2 } from './schemaMigration.js?v=16';
+import { connectAdminArea, DEFAULT_ADMIN_FOLDER, deleteAdminPath, getAdminFileUrl, saveAdminData, uploadAdminFile } from './adminStorage.js?v=16';
 
 const app = document.querySelector('#app');
 const pageNames = {
@@ -21,6 +22,7 @@ let currentPage = 'home';
 let selectedRegisterType = 'observação';
 let data;
 let user;
+let microsoftUser;
 let oneDriveConfig;
 let dataNamespace = null;
 let microsoftAccount;
@@ -36,6 +38,10 @@ let pendingAvatarCrop = null;
 let historyFilter = { period: 'today', date: localDate(), type: '' };
 let lastMigrationReport = null;
 let pendingConflict = null;
+let deviceBinding = null;
+let restrictedDeviceMode = false;
+let deviceInactivityTimer = null;
+let selectedDevicePersonId = '';
 let suppressNextCommonBackup = false;
 const privateImageUrls = new Map();
 const privateImageLoads = new Map();
@@ -81,6 +87,7 @@ async function init() {
 
     setDataBaseVersion(remoteVersion);
     user = resolveAuthorizedUser(microsoftAccount);
+    microsoftUser = user;
     if ((user.role || user.roleId) !== 'admin' && (Number(data.meta?.privacyMigrationVersion || 0) < 1 || hasLegacyPrivateCaregiverData(data) || containsEmbeddedDataUrls(data))) {
       throw new Error('Existem dados antigos da babá que precisam ser protegidos. Entre primeiro com o administrador para concluir a migração segura.');
     }
@@ -97,6 +104,11 @@ async function init() {
     await offerLegacyPendingPhotoRecovery();
     await syncPendingPhotoUploads();
     syncState = hasPendingChanges() ? 'Pendente' : 'Sincronizado';
+    if (resumeRestrictedDeviceMode()) return;
+    if ((microsoftUser.role || microsoftUser.roleId) === 'admin') {
+      renderDeviceEnrollment();
+      return;
+    }
     render();
   } catch (error) {
     app.innerHTML = '<main class="fatal"><h1>Não foi possível conectar</h1><p>' + escape(error.message) + '</p><button class="button" data-action="reconfigure-onedrive">Revisar configuração</button></main>';
@@ -269,6 +281,116 @@ function resolveAuthorizedUser(account) {
   data.meta = { ...(data.meta || {}), bootstrapCompleted: true };
   return found;
 }
+
+function isRestrictedDeviceMode() { return restrictedDeviceMode === true && (user?.role || user?.roleId) === 'caregiver'; }
+function currentMicrosoftAdmin() {
+  const id = microsoftUser?.id;
+  const email = String(microsoftUser?.email || microsoftAccount?.username || '').toLowerCase();
+  return (data.users || []).find((item) => item.id === id) || (data.users || []).find((item) => String(item.email || '').toLowerCase() === email && (item.role || item.roleId) === 'admin') || null;
+}
+function hasPin(record) { return Boolean(record?.pinHash?.salt && record?.pinHash?.digest); }
+function userForDeviceBinding() {
+  if (!deviceBinding?.personId) return null;
+  const candidate = (data.users || []).find((item) => item.personId === deviceBinding.personId);
+  return candidate && candidate.active !== false && candidate.deviceEnabled === true && (candidate.role || candidate.roleId) === 'caregiver' && hasPin(candidate) ? candidate : null;
+}
+function devicePerson() { return personById(deviceBinding?.personId || user?.personId) || {}; }
+function resumeRestrictedDeviceMode() {
+  deviceBinding = getDeviceBinding();
+  const deviceUser = userForDeviceBinding();
+  if (!deviceBinding) return false;
+  if (!deviceUser) { clearDeviceBinding(); deviceBinding = null; return false; }
+  user = deviceUser; restrictedDeviceMode = true; adminData = null; adminAreaStatus = 'restricted';
+  deviceBinding = setDeviceLocked(true); renderDeviceLock(); return true;
+}
+function renderAdminPinSetup() {
+  app.innerHTML = '<main class="fatal device-access-screen"><p class="eyebrow">Segurança do dispositivo</p><h1>Defina o PIN do administrador</h1><p>Ele será exigido para trocar o usuário deste aparelho e abrir as configurações administrativas.</p><form id="admin-pin-setup-form" class="form-card"><label>PIN do administrador<input name="pin" type="password" inputmode="numeric" pattern="[0-9]{4,6}" minlength="4" maxlength="6" autocomplete="new-password" required></label><label>Confirmar PIN<input name="pinConfirmation" type="password" inputmode="numeric" pattern="[0-9]{4,6}" minlength="4" maxlength="6" autocomplete="new-password" required></label><button class="button button--wide" type="submit">Salvar PIN e continuar</button></form></main>';
+}
+function renderDeviceEnrollment() {
+  const admin = currentMicrosoftAdmin();
+  if (!admin || !hasPin(admin)) { renderAdminPinSetup(); return; }
+  const people = activePeople().filter((person) => ((data.users || []).find((item) => item.personId === person.id)?.role || '') !== 'admin');
+  const selected = people.find((person) => person.id === selectedDevicePersonId);
+  const cards = people.map((person) => {
+    const photo = person.photoPath ? privateImageMarkup(person.photoPath, person.photoUrl || 'assets/icons/child-avatar.svg', 'Foto de ' + person.fullName) : person.photoUrl ? '<img src="' + escape(person.photoUrl) + '" alt="">' : '<span>' + personTypeIcon(person.primaryType) + '</span>';
+    return '<button class="person-card__main device-person-choice ' + (selected?.id === person.id ? 'is-selected' : '') + '" data-action="select-device-person" data-id="' + escape(person.id) + '"><span class="person-avatar">' + photo + '</span><span><strong>' + escape(firstName(person.fullName || 'Pessoa')) + '</strong><small>' + escape(person.relationship || 'Babá/cuidador(a)') + '</small></span><b>›</b></button>';
+  }).join('');
+  const form = selected ? '<form id="device-enrollment-form" class="form-card"><input type="hidden" name="personId" value="' + escape(selected.id) + '"><p class="permission-note">Defina ou redefina o PIN de ' + escape(firstName(selected.fullName)) + '. O PIN não é salvo em texto puro.</p><label>PIN de acesso<input name="pin" type="password" inputmode="numeric" pattern="[0-9]{4,6}" minlength="4" maxlength="6" autocomplete="new-password" required></label><label>Confirmar PIN<input name="pinConfirmation" type="password" inputmode="numeric" pattern="[0-9]{4,6}" minlength="4" maxlength="6" autocomplete="new-password" required></label><label>Bloqueio automático<select name="lockAfterMinutes"><option value="10">10 minutos</option><option value="5">5 minutos</option><option value="15">15 minutos</option><option value="30">30 minutos</option></select></label><button class="button button--wide" type="submit">Entrar como ' + escape(firstName(selected.fullName)) + '</button></form>' : '<p class="muted">Selecione uma pessoa ativa para configurar este aparelho.</p>';
+  app.innerHTML = '<main class="fatal device-access-screen"><p class="eyebrow">Este aparelho</p><h1>Quem usará este dispositivo?</h1><p>Escolha quem usará o app. A pessoa verá somente os recursos liberados para ela.</p><section class="device-person-list">' + (cards || '<p class="muted">Cadastre primeiro a babá em Pessoas.</p>') + '</section>' + form + '<button class="text-button" data-action="continue-admin-mode">Usar modo administrador</button></main>';
+  hydratePrivateImages().catch(() => {});
+}
+function renderDeviceLock() {
+  const person = devicePerson();
+  const blocked = isAttemptBlocked(deviceBinding, 'unlock');
+  const photo = person.photoPath ? privateImageMarkup(person.photoPath, person.photoUrl || 'assets/icons/child-avatar.svg', 'Foto de ' + (person.fullName || 'usuária'), 'device-access-avatar') : '<span class="device-access-avatar person-avatar">' + initials(person.fullName || user?.name || 'U') + '</span>';
+  const form = blocked ? '<p class="restricted-card">Muitas tentativas inválidas. Tente novamente em aproximadamente ' + remainingBlockMinutes(deviceBinding, 'unlock') + ' minuto(s).</p>' : '<form id="device-unlock-form" class="form-card"><label>PIN de acesso<input name="pin" type="password" inputmode="numeric" pattern="[0-9]{4,6}" minlength="4" maxlength="6" autocomplete="current-password" autofocus required></label><button class="button button--wide" type="submit">Entrar</button></form>';
+  app.innerHTML = '<main class="fatal device-access-screen"><div class="device-access-identity">' + photo + '<div><p class="eyebrow">Modo Babá</p><h1>' + escape(firstName(person.fullName || user?.name || 'Usuária')) + '</h1><p>' + escape(person.relationship || 'Babá/cuidador(a)') + '</p></div></div><p>Informe seu PIN para abrir os afazeres.</p>' + form + '<button class="text-button" data-action="request-admin-mode">Trocar usuário / Modo administrador</button></main>';
+  hydratePrivateImages().catch(() => {});
+}
+function renderAdminPinPrompt() {
+  const blocked = isAttemptBlocked(deviceBinding, 'admin');
+  const form = blocked ? '<p class="restricted-card">Muitas tentativas inválidas. Tente novamente em aproximadamente ' + remainingBlockMinutes(deviceBinding, 'admin') + ' minuto(s).</p>' : '<form id="admin-unlock-form" class="form-card"><label>PIN do administrador<input name="pin" type="password" inputmode="numeric" pattern="[0-9]{4,6}" minlength="4" maxlength="6" autocomplete="current-password" autofocus required></label><button class="button button--wide" type="submit">Continuar como administrador</button></form>';
+  app.innerHTML = '<main class="fatal device-access-screen"><p class="eyebrow">Área protegida</p><h1>Modo administrador</h1><p>Digite o PIN do administrador para trocar o usuário ou alterar este aparelho.</p>' + form + '<button class="text-button" data-action="back-to-device-lock">Voltar</button></main>';
+}
+async function saveAdminPin(form) {
+  const values = new FormData(form); const pin = String(values.get('pin') || ''); const confirmation = String(values.get('pinConfirmation') || '');
+  if (!validPin(pin) || pin !== confirmation) throw new Error('Informe e confirme um PIN numérico igual, de 4 a 6 dígitos.');
+  const admin = currentMicrosoftAdmin(); if (!admin) throw new Error('Administrador não encontrado.');
+  microsoftUser = updateRecord('users', admin.id, { pinHash: await createPinHash(pin), pinUpdatedAt: new Date().toISOString() }, admin.id); user = microsoftUser; renderDeviceEnrollment();
+}
+async function enrollDeviceUser(form) {
+  const values = new FormData(form); const person = personById(String(values.get('personId') || '')); const pin = String(values.get('pin') || ''); const confirmation = String(values.get('pinConfirmation') || '');
+  if (!person || person.active === false) throw new Error('Escolha uma pessoa ativa para este dispositivo.');
+  if (!validPin(pin) || pin !== confirmation) throw new Error('Informe e confirme um PIN numérico igual, de 4 a 6 dígitos.');
+  const existing = (data.users || []).find((item) => item.personId === person.id);
+  if ((existing?.role || existing?.roleId) === 'admin') throw new Error('O administrador não pode ser vinculado ao modo restrito.');
+  const record = { ...(existing || {}), personId: person.id, name: person.fullName, role: 'caregiver', roleId: 'caregiver', active: true, deviceEnabled: true, deviceAuthorizedAt: new Date().toISOString(), pinHash: await createPinHash(pin), pinUpdatedAt: new Date().toISOString() };
+  const deviceUser = existing ? updateRecord('users', existing.id, record, microsoftUser.id) : addRecord('users', record, microsoftUser.id);
+  updateRecord('people', person.id, { deviceEnabled: true }, microsoftUser.id);
+  deviceBinding = saveDeviceBinding({ personId: person.id, displayName: person.fullName, role: 'caregiver', permissions: deviceUser.permissions || [], restricted: true, locked: false, lockAfterMinutes: Number(values.get('lockAfterMinutes') || 10), configuredAt: new Date().toISOString(), unlockFailedAttempts: 0, unlockBlockedUntil: null, adminFailedAttempts: 0, adminBlockedUntil: null });
+  user = deviceUser; restrictedDeviceMode = true; adminData = null; adminAreaStatus = 'restricted'; startDeviceInactivityTimer(); render(); notify('Modo Babá configurado neste aparelho.');
+}
+async function unlockDevice(form) {
+  deviceBinding = getDeviceBinding(); if (!deviceBinding || isAttemptBlocked(deviceBinding, 'unlock')) throw new Error('Este dispositivo está temporariamente bloqueado.');
+  const deviceUser = userForDeviceBinding(); if (!deviceUser) throw new Error('O acesso deste dispositivo foi revogado.');
+  if (!await verifyPin(String(new FormData(form).get('pin') || ''), deviceUser.pinHash)) {
+    deviceBinding = registerFailedAttempt('unlock'); throw new Error(isAttemptBlocked(deviceBinding, 'unlock') ? 'PIN bloqueado por 15 minutos após muitas tentativas inválidas.' : 'PIN incorreto.');
+  }
+  deviceBinding = clearFailedAttempts('unlock'); deviceBinding = setDeviceLocked(false);
+  user = updateRecord('users', deviceUser.id, { lastAccessAt: new Date().toISOString(), lastUnlockedAt: new Date().toISOString() }, deviceUser.id);
+  restrictedDeviceMode = true; startDeviceInactivityTimer(); render();
+}
+async function unlockAdministrator(form) {
+  deviceBinding = getDeviceBinding(); if (!deviceBinding || isAttemptBlocked(deviceBinding, 'admin')) throw new Error('A troca de usuário está temporariamente bloqueada.');
+  const admin = currentMicrosoftAdmin(); if (!admin || !hasPin(admin)) throw new Error('O PIN do administrador precisa ser definido primeiro.');
+  if (!await verifyPin(String(new FormData(form).get('pin') || ''), admin.pinHash)) {
+    deviceBinding = registerFailedAttempt('admin'); throw new Error(isAttemptBlocked(deviceBinding, 'admin') ? 'PIN bloqueado por 15 minutos após muitas tentativas inválidas.' : 'PIN incorreto.');
+  }
+  clearFailedAttempts('admin'); setDeviceLocked(true); restrictedDeviceMode = false; user = admin; clearDeviceInactivityTimer(); renderDeviceEnrollment();
+}
+function returnToDeviceLock() { const deviceUser = userForDeviceBinding(); if (!deviceUser) return; user = deviceUser; restrictedDeviceMode = true; deviceBinding = setDeviceLocked(true); clearDeviceInactivityTimer(); renderDeviceLock(); }
+function lockDeviceNow() { if (!isRestrictedDeviceMode()) return; deviceBinding = setDeviceLocked(true); clearDeviceInactivityTimer(); renderDeviceLock(); }
+function startDeviceInactivityTimer() { clearDeviceInactivityTimer(); if (!isRestrictedDeviceMode()) return; deviceInactivityTimer = window.setTimeout(lockDeviceNow, Math.max(1, Number(getDeviceBinding()?.lockAfterMinutes || 10)) * 60_000); }
+function clearDeviceInactivityTimer() { if (deviceInactivityTimer) window.clearTimeout(deviceInactivityTimer); deviceInactivityTimer = null; }
+function recordDeviceActivity() { if (isRestrictedDeviceMode() && getDeviceBinding()?.locked !== true) startDeviceInactivityTimer(); }
+function canOpenPage(page) {
+  if (!isRestrictedDeviceMode()) return true;
+  const allowed = new Set(['home', 'instructions', 'tasks', 'task-detail', 'register', 'emergency', 'more', 'documents', 'vaccines', 'appointments', 'medications', 'history']);
+  const permission = { documents: 'documents:view', vaccines: 'vaccines:view', appointments: 'appointments:view', medications: 'medications:view', history: 'tasks:view' }[page];
+  return allowed.has(page) && (!permission || canCurrent(permission));
+}
+function assertDeviceAction(action) {
+  if (!isRestrictedDeviceMode()) return;
+  const forbidden = new Set(['microsoft-login','sign-out-microsoft','reconfigure-onedrive','sync-now','open-onedrive','setup-admin-area','open-admin-file','restore-backup','clear-example-data','clear-example-vaccines','add-person','open-person','edit-person','filter-people','toggle-person-active','delete-person','open-caregiver-step','person-documents','manage-person-access','edit-user-access','revoke-user-access','restore-trash','add-growth','edit-growth','delete-growth','print-report','export-backup','export-pending-conflict','discard-pending-conflict','revoke-device']);
+  if (forbidden.has(action)) throw new Error('Esta ação não está disponível no Modo Babá.');
+  const required = { 'open-task': 'tasks:view', 'toggle-checklist': 'tasks:complete', 'complete-task': 'tasks:complete', 'open-photo': 'photos:attach', 'open-document': 'documents:view', 'open-vaccine': 'vaccines:view', 'open-vaccine-proof': 'vaccines:view', 'edit-vaccine': 'vaccines:edit', 'delete-vaccine': 'vaccines:delete' };
+  if (required[action] && !canCurrent(required[action])) throw new Error('Seu perfil não tem permissão para esta ação.');
+}
+function assertDeviceForm(formId) {
+  if (!isRestrictedDeviceMode()) return;
+  if (new Set(['onedrive-setup-form','task-form','attachment-form','child-profile-form','person-form','caregiver-form','access-form','growth-form','user-form','migration-form','vaccine-form','vaccine-bulk-photo-form']).has(formId)) throw new Error('Este formulário não está disponível no Modo Babá.');
+}
+
 function renderSetup() {
   app.innerHTML = `<main class="fatal"><p class="eyebrow">Configuração inicial</p><h1>Conectar ao OneDrive</h1><p>Informe apenas os identificadores públicos do aplicativo Microsoft. Eles ficam neste navegador; senha e client secret não são usados.</p><form id="onedrive-setup-form" class="form-card"><label>ID do aplicativo cliente<input name="clientId" required autocomplete="off" placeholder="00000000-0000-0000-0000-000000000000"></label><label>ID do diretório/locatário<input name="tenantId" value="organizations" required autocomplete="off"></label><label>Pasta no OneDrive<input name="folderName" value="(APP MARIA ELIS)" required></label><button class="button button--wide" type="submit">Salvar e entrar com Microsoft</button></form></main>`;
 }
@@ -461,6 +583,11 @@ function setSyncState(value) {
   const badge = document.querySelector('#sync-indicator');
   if (badge) badge.textContent = value;
 }
+
+function restrictedDeviceControls() {
+  return isRestrictedDeviceMode() ? '<button class="icon-button" data-action="lock-device-now" aria-label="Bloquear agora" title="Bloquear agora">⌑</button><button class="icon-button" data-action="request-admin-mode" aria-label="Trocar usuário" title="Trocar usuário">⋮</button>' : '';
+}
+
 function render() {
   const profile = data.childProfile;
   app.innerHTML = `
@@ -471,7 +598,7 @@ function render() {
       </div>
       <div class="topbar__actions"><button class="icon-button" data-page="more" aria-label="Abrir mais opções" title="Mais opções">☰</button>
         <span id="sync-indicator" class="offline-indicator">${escape(syncState)}</span><span id="offline-indicator" class="offline-indicator" ${navigator.onLine ? 'hidden' : ''}>Offline</span>
-        <button class="icon-button" data-action="toggle-theme" aria-label="Alternar tema" title="Alternar tema">◐</button>
+        <button class="icon-button" data-action="toggle-theme" aria-label="Alternar tema" title="Alternar tema">◐</button>${restrictedDeviceControls()}
       </div>
     </header>
     <main id="main-content" class="main-content" tabindex="-1">
@@ -484,6 +611,7 @@ function render() {
 }
 
 function renderPage() {
+  if (!canOpenPage(currentPage)) return restrictedPage('Área protegida', 'Esta tela não está disponível no Modo Babá.');
   switch (currentPage) {
     case 'home': return renderHome();
     case 'instructions': return renderAfazeres();
@@ -511,6 +639,7 @@ function renderPage() {
   }
 }
 
+function homeProfileButton() { return isRestrictedDeviceMode() ? '<span class="avatar-button" aria-label="Perfil restrito">' + initials(user.name) + '</span>' : '${homeProfileButton()}'; }
 function renderHome() {
   if (!canCurrent('dashboard:view')) return restrictedPage('Hoje', 'Seu perfil não pode abrir o painel.');
   if (!canCurrent('tasks:view')) return `${subPageHeading('Hoje', 'Acesso essencial.')}<section class="settings-card"><h2>Acesso limitado</h2><p>Seu perfil não recebeu acesso aos afazeres. Use Emergência ou Mais para abrir somente os recursos liberados.</p></section>`;
@@ -521,7 +650,7 @@ function renderHome() {
   return `
     <section class="page-heading">
       <div><p class="eyebrow">${formatLongDate(today)}</p><h1>Bom dia, ${escape(firstName(user.name))}.</h1><p class="muted">Hoje, ${escape(profile().name)} tem ${tasks.length} afazer(es).</p></div>
-      <button class="avatar-button" data-page="settings" aria-label="Abrir configurações">${initials(user.name)}</button>
+      ${homeProfileButton()}
     </section>
     <section class="hero-card hero-card--tasks"><div class="hero-card__copy"><span class="status-pill status-pill--soft">${escape(syncState)}</span><h2>Afazeres do dia</h2><p>${pending.length} pendente(s) e ${completed.length} concluído(s).</p></div>${privateImageMarkup(profile().avatarPath, profile().photoUrl || 'assets/icons/child-avatar.svg', 'Avatar de ' + profile().name, 'hero-card__avatar')}</section>
     <section class="today-actions">${canCurrent('tasks:create') ? `<button class="button button--wide" data-page="register">＋ Adicionar afazer</button>` : ''}<button class="button button--secondary button--wide" data-page="register">◉ Registrar foto/observação</button></section>
@@ -564,15 +693,23 @@ function renderMore() {
     ['settings', '⚙', 'Configurações', 'OneDrive, backup e acesso']
   ];
   if (canCurrent('people:manage') && (data.trash || []).length) items.push(['trash', '⌫', 'Lixeira', 'Restaurar itens por 30 dias']);
-  return `${subPageHeading('Mais', 'Recursos organizados por assunto.')}<section class="menu-list">${items.map(([page, icon, title, copy]) => `<button class="menu-item" data-page="${page}"><span class="menu-item__icon">${icon}</span><span><strong>${title}</strong><small>${copy}</small></span><span class="chevron">›</span></button>`).join('')}</section>`;
+  return `${subPageHeading('Mais', 'Recursos organizados por assunto.')}<section class="menu-list">${items.filter(([page]) => canOpenPage(page)).map(([page, icon, title, copy]) => `<button class="menu-item" data-page="${page}"><span class="menu-item__icon">${icon}</span><span><strong>${title}</strong><small>${copy}</small></span><span class="chevron">›</span></button>`).join('')}</section>`;
+}
+
+function documentVisibleToCurrent(item) {
+  if (!isRestrictedDeviceMode()) return true;
+  return item?.caregiverVisible === true || item?.allowedRoles?.includes('caregiver') || item?.allowedPersonIds?.includes(user?.personId) || item?.allowedUserIds?.includes(user?.id);
+}
+function canOpenDocumentPath(path) {
+  return (data.documents || []).some((item) => item.filePath === path && documentVisibleToCurrent(item));
 }
 function renderDocuments() {
   const allowed = canCurrent('documents:view');
   if (!allowed) return restrictedPage('Documentos', 'Documentos e resultados clínicos são restritos por padrão para cuidadores e visitantes.');
   const canUpload = canCurrent('documents:create');
-  const records = data.documents || [];
+  const records = (data.documents || []).filter(documentVisibleToCurrent);
   return `${subPageHeading('Documentos', 'Anexos privados organizados no OneDrive.')}
-    ${canUpload ? `<section class="settings-card"><h2>Adicionar documento</h2><form id="attachment-form" class="form-card"><label>Título<input name="title" required placeholder="Ex.: Carteira de vacinação"></label><label>Categoria<select name="category"><option>Saúde</option><option>Documentos pessoais</option><option>Escola</option><option>Outros</option></select></label><label>Arquivo<input name="attachment" type="file" required></label><label>Observação<textarea name="description" rows="2" placeholder="Opcional"></textarea></label><button class="button button--wide" type="submit">Enviar para o OneDrive</button></form></section>` : ''}
+    ${canUpload ? `<section class="settings-card"><h2>Adicionar documento</h2><form id="attachment-form" class="form-card"><label>Título<input name="title" required placeholder="Ex.: Carteira de vacinação"></label><label>Categoria<select name="category"><option>Saúde</option><option>Documentos pessoais</option><option>Escola</option><option>Outros</option></select></label><label>Arquivo<input name="attachment" type="file" required></label><label>Observação<textarea name="description" rows="2" placeholder="Opcional"></textarea></label><label class="check-row"><input type="checkbox" name="caregiverVisible"> Liberar este documento no Modo Babá</label><button class="button button--wide" type="submit">Enviar para o OneDrive</button></form></section>` : ''}
     <p class="privacy-inline">🔒 Os arquivos reais permanecem em <strong>Anexos/</strong> no OneDrive. O repositório não recebe documentos ou fotos.</p>
     <div class="record-list">${records.map((document) => `<article class="record-card"><span class="record-icon">▣</span><div><span class="status-pill status-pill--soft">${escape(document.category)}</span><h2>${escape(document.title)}</h2><p>${escape(document.description || 'Sem observação.')}</p><small>${document.filePath ? escape(document.filePath) : document.expirationDate ? `Validade: ${formatDate(document.expirationDate)}` : 'Sem arquivo anexado'}</small></div>${document.filePath ? `<button class="icon-button" data-action="open-document" data-path="${escape(document.filePath)}" aria-label="Abrir ${escape(document.title)}">›</button>` : ''}</article>`).join('') || emptyState('Nenhum documento cadastrado.', 'Envie o primeiro arquivo privado.', '')}</div>`;
 }
@@ -660,11 +797,31 @@ function renderHistory() {
     <form id="history-filter-form" class="filter-panel"><label>Período<select name="period"><option value="today" ${historyFilter.period === 'today' ? 'selected' : ''}>Hoje</option><option value="yesterday" ${historyFilter.period === 'yesterday' ? 'selected' : ''}>Ontem</option><option value="week" ${historyFilter.period === 'week' ? 'selected' : ''}>Esta semana</option><option value="date" ${historyFilter.period === 'date' ? 'selected' : ''}>Escolher data</option></select></label><label>Data<input type="date" name="date" value="${historyFilter.date}"></label><label>Tipo<select name="type"><option value="">Todos</option>${taskTypes().map((type) => `<option value="${type}" ${historyFilter.type === type ? 'selected' : ''}>${type}</option>`).join('')}</select></label><button class="button button--secondary" type="submit">Filtrar</button></form>
     <section class="section-block"><div class="section-title"><div><p class="eyebrow">${filtered.length} resultado(s)</p><h2>Afazeres</h2></div></div><div class="task-list">${filtered.map(renderDayTask).join('') || emptyState('Nenhum afazer encontrado.', 'Ajuste o filtro ou crie um afazer.', 'register')}</div></section>`;
 }
+
+function renderDeviceAdminCard() {
+  const binding = getDeviceBinding();
+  if ((user?.role || user?.roleId) !== 'admin' || !binding) return '';
+  const person = personById(binding.personId);
+  return '<section class="settings-card"><div class="setting-line"><div><strong>Dispositivo vinculado</strong><p>' + escape(person?.fullName || binding.displayName || 'Usuária') + ' usa o Modo Babá neste aparelho.</p></div><button class="button button--danger button--small" data-action="revoke-device">Revogar</button></div></section>';
+}
+function revokeCurrentDevice() {
+  if ((user?.role || user?.roleId) !== 'admin') throw new Error('Somente o administrador pode revogar este dispositivo.');
+  const binding = getDeviceBinding();
+  if (!binding) return notify('Não há dispositivo vinculado.', 'warning');
+  const access = (data.users || []).find((item) => item.personId === binding.personId);
+  if (access) updateRecord('users', access.id, { deviceEnabled: false, deviceRevokedAt: new Date().toISOString() }, user.id);
+  const person = personById(binding.personId);
+  if (person) updateRecord('people', person.id, { deviceEnabled: false }, user.id);
+  clearDeviceBinding(); deviceBinding = null; selectedDevicePersonId = '';
+  notify('Dispositivo revogado. A pessoa não poderá desbloquear este aparelho.');
+  render();
+}
 function renderSettings() {
+  if (isRestrictedDeviceMode()) return restrictedPage('Configurações', 'Configurações técnicas são exclusivas do administrador.');
   return `${subPageHeading('Configurações', 'OneDrive, backup e acesso da família.')}
     <section class="settings-card"><div class="setting-line"><div><strong>Conta conectada</strong><p>${escape(renderConnectionStatus(microsoftAccount, oneDriveConfig.folderName))}</p></div><span class="status-pill status-pill--success">${escape(syncState)}</span></div></section>
     <section class="settings-card"><div class="setting-line"><div><strong>Dados da criança</strong><p>Nome, alergias, contatos e observações fixas.</p></div><button class="button button--secondary button--small" data-page="child-data">Editar</button></div></section>
-${renderAdminSettingsCard()}
+${renderAdminSettingsCard()}${renderDeviceAdminCard()}
     <section class="settings-card"><div class="setting-line"><div><strong>Sincronização</strong><p>Salva dados e tenta enviar fotos pendentes.</p></div><button class="button button--secondary button--small" data-action="sync-now">Sincronizar</button></div></section>
     ${(user.role || user.roleId) === 'admin' ? '<section class="settings-card"><div class="setting-line"><div><strong>Backup</strong><p>Backup diário no OneDrive.</p></div><button class="button button--secondary button--small" data-action="restore-backup">Restaurar</button></div></section>' : ''}
     <section class="settings-card"><div class="setting-line"><div><strong>Pasta privada</strong><p>${escape(oneDriveConfig.folderName)}</p></div><button class="button button--secondary button--small" data-action="open-onedrive">Abrir</button></div></section>
@@ -790,7 +947,10 @@ function personTypeIcon(type) {
   if (type === 'pickup-authorized') return '✓';
   return '◉';
 }
-function canCurrent(permission) { return can(user?.role || user?.roleId, permission, user?.permissions || []); }
+function canCurrent(permission) {
+  if (isRestrictedDeviceMode() && (/^(people|users|caregivers|permissions|child|reports|migration|trash):/.test(permission) || permission === 'tasks:create')) return false;
+  return can(user?.role || user?.roleId, permission, user?.permissions || []);
+}
 function activePeople() { return (data.people || []).filter((person) => person.active !== false); }
 function personVisibleToCurrent(person) { return canCurrent('people:manage') || isEmergencyPerson(person) || person?.types?.includes('pickup-authorized') || ['school','doctor','specialist','therapist'].includes(person?.primaryType); }
 function personById(id) { return (data.people || []).find((person) => person.id === id); }
@@ -900,14 +1060,26 @@ function statusLabel(value) { return ({ applied: 'Aplicada', upcoming: 'Próxima
 function statusClass(value) { return ({ applied: 'status-pill--success', completed: 'status-pill--success', active: 'status-pill--success', overdue: 'status-pill--danger', upcoming: 'status-pill--warning', scheduled: 'status-pill--info', pending: 'status-pill--warning' })[value] || 'status-pill--soft'; }
 function iconFor(type) { return ({ alimentação: '◌', sono: '☾', medicamento: '✚', sintoma: '⌁', observação: '✎', atividade: '★', evento: '★' })[type] || '•'; }
 
+document.addEventListener('visibilitychange', () => { if (document.hidden && isRestrictedDeviceMode()) lockDeviceNow(); });
+document.addEventListener('pointerdown', recordDeviceActivity, { passive: true });
+document.addEventListener('keydown', recordDeviceActivity);
 document.addEventListener('click', async (event) => {
   const control = event.target.closest('[data-page], [data-quick], [data-register-type], [data-action]');
   if (!control || control.disabled) return;
-  if (control.dataset.page) { currentPage = control.dataset.page; if (currentPage !== 'task-detail') selectedTaskId = null; if (currentPage !== 'vaccine-detail') selectedVaccineId = null; if (currentPage !== 'person-detail') selectedPersonId = null; render(); window.scrollTo({ top: 0, behavior: 'smooth' }); return; }
+  recordDeviceActivity();
+  if (control.dataset.page) {
+    if (!canOpenPage(control.dataset.page)) { notify('Esta tela não está disponível no Modo Babá.', 'error'); return; }
+    currentPage = control.dataset.page; if (currentPage !== 'task-detail') selectedTaskId = null; if (currentPage !== 'vaccine-detail') selectedVaccineId = null; if (currentPage !== 'person-detail') selectedPersonId = null; render(); window.scrollTo({ top: 0, behavior: 'smooth' }); return; }
   if (control.dataset.quick) { selectedRegisterType = control.dataset.quick; currentPage = 'register'; render(); return; }
   if (control.dataset.registerType) { selectedRegisterType = control.dataset.registerType; render(); return; }
   try {
+    assertDeviceAction(control.dataset.action);
     switch (control.dataset.action) {
+      case 'select-device-person': selectedDevicePersonId = control.dataset.id || ''; renderDeviceEnrollment(); break;
+      case 'request-admin-mode': renderAdminPinPrompt(); break;
+      case 'back-to-device-lock': returnToDeviceLock(); break;
+      case 'continue-admin-mode': if ((user?.role || user?.roleId) !== 'admin' || restrictedDeviceMode) throw new Error('Confirme o PIN do administrador para continuar.'); render(); break;
+      case 'lock-device-now': lockDeviceNow(); break; case 'revoke-device': revokeCurrentDevice(); break;
       case 'reload': window.location.reload(); break;
       case 'toggle-theme': toggleTheme(); break;
       case 'microsoft-login': await signInMicrosoft(); break;
@@ -929,7 +1101,7 @@ document.addEventListener('click', async (event) => {
       }
       case 'sync-now': await syncNow(); notify('Sincronização concluída.'); break;
       case 'open-onedrive': window.open(await getRootWebUrl(), '_blank', 'noopener'); break;
-      case 'open-document': window.open(await getFileUrl(control.dataset.path), '_blank', 'noopener'); break;
+      case 'open-document': if (isRestrictedDeviceMode() && !canOpenDocumentPath(control.dataset.path)) throw new Error('Este documento não foi liberado para o Modo Babá.'); window.open(await getFileUrl(control.dataset.path), '_blank', 'noopener'); break;
       case 'setup-admin-area': await setupAdminArea(); break;
       case 'open-admin-file': window.open(await getAdminFileUrl(control.dataset.path), '_blank', 'noopener'); break;
       case 'open-vaccine-proof': window.open(await getFileUrl(control.dataset.path), '_blank', 'noopener'); break;
@@ -971,7 +1143,13 @@ document.addEventListener('click', async (event) => {
 });
 document.addEventListener('submit', async (event) => {
   event.preventDefault();
+  recordDeviceActivity();
   try {
+    if (event.target.id === 'admin-pin-setup-form') { await saveAdminPin(event.target); return; }
+    if (event.target.id === 'device-enrollment-form') { await enrollDeviceUser(event.target); return; }
+    if (event.target.id === 'device-unlock-form') { await unlockDevice(event.target); return; }
+    if (event.target.id === 'admin-unlock-form') { await unlockAdministrator(event.target); return; }
+    assertDeviceForm(event.target.id);
     if (event.target.id === 'onedrive-setup-form') { const formData = new FormData(event.target); saveOneDriveConfig({ clientId: formData.get('clientId'), tenantId: formData.get('tenantId'), folderName: formData.get('folderName') }); window.location.reload(); return; }
     if (event.target.id === 'task-form') await saveTask(event.target);
     if (event.target.id === 'quick-form') await saveQuickRecord(event.target);
@@ -981,7 +1159,7 @@ document.addEventListener('submit', async (event) => {
     if (event.target.id === 'child-profile-form') await saveChildProfile(event.target);
     if (event.target.id === 'person-form') await savePerson(event.target);
     if (event.target.id === 'caregiver-form') await saveCaregiverStep(event.target, event.submitter);
-    if (event.target.id === 'access-form') saveAccess(event.target);
+    if (event.target.id === 'access-form') await saveAccess(event.target);
     if (event.target.id === 'growth-form') saveGrowth(event.target);
     if (event.target.id === 'user-form') saveUser(event.target);
     if (event.target.id === 'migration-form') await importMigrationBundle(event.target);
@@ -1044,7 +1222,7 @@ function openPersonEditor(id = '') {
   if (!canCurrent('people:manage')) return notify('Seu perfil não pode alterar pessoas.', 'error');
   const person = id ? personById(id) : null;
   const types = new Set(person?.types || []);
-  document.querySelector('#modal-root').innerHTML = `<div class="modal-backdrop" data-action="close-modal"><section class="modal" role="dialog" aria-modal="true" onclick="event.stopPropagation()"><button class="modal__close" data-action="close-modal" aria-label="Fechar">×</button><p class="eyebrow">${person ? 'Editar' : 'Nova pessoa'}</p><h2>${person ? escape(person.fullName) : 'Quem você quer cadastrar?'}</h2><form id="person-form"><input type="hidden" name="personId" value="${escape(person?.id || '')}"><label>Nome completo<input name="fullName" value="${escape(person?.fullName || '')}" required autofocus></label><label>Tipo principal<select name="primaryType">${personTypes().map(([value,label]) => `<option value="${value}" ${person?.primaryType === value ? 'selected' : ''}>${label}</option>`).join('')}</select></label><label>Vínculo ou função<input name="relationship" value="${escape(person?.relationship || '')}" placeholder="Ex.: avó materna, pediatra"></label><div class="form-grid"><label>Telefone<input name="phone" inputmode="tel" value="${escape(person?.phone || '')}"></label><label>WhatsApp<input name="whatsapp" inputmode="tel" value="${escape(person?.whatsapp || '')}"></label></div><label>E-mail<input name="email" type="email" value="${escape(person?.email || '')}"></label><label>Foto<input name="personPhoto" type="file" accept="image/*"></label><details class="advanced-fields"><summary>Mais informações</summary><label>Endereço<input name="address" value="${escape(person?.address?.formatted || '')}"></label><div class="form-grid"><label>Latitude<input name="latitude" inputmode="decimal" value="${escape(person?.address?.latitude ?? '')}"></label><label>Longitude<input name="longitude" inputmode="decimal" value="${escape(person?.address?.longitude ?? '')}"></label></div><label>Prioridade<input name="priority" type="number" min="0" max="99" value="${escape(person?.priority ?? 0)}"></label><label>Observações<textarea name="notes" rows="3">${escape(person?.notes || '')}</textarea></label><fieldset class="choice-field"><legend>Também é</legend><label class="check-row"><input type="checkbox" name="extraTypes" value="emergency-contact" ${types.has('emergency-contact') ? 'checked' : ''}> Contato de emergência</label><label class="check-row"><input type="checkbox" name="extraTypes" value="pickup-authorized" ${types.has('pickup-authorized') ? 'checked' : ''}> Autorizada a buscar</label><label class="check-row"><input type="checkbox" name="extraTypes" value="pickup-denied" ${types.has('pickup-denied') ? 'checked' : ''}> Não autorizada a buscar</label></fieldset><label class="check-row"><input type="checkbox" name="active" ${person?.active === false ? '' : 'checked'}> Cadastro ativo</label></details><button class="button button--wide" type="submit">${person ? 'Salvar alterações' : 'Salvar pessoa'}</button></form></section></div>`;
+  document.querySelector('#modal-root').innerHTML = `<div class="modal-backdrop" data-action="close-modal"><section class="modal" role="dialog" aria-modal="true" onclick="event.stopPropagation()"><button class="modal__close" data-action="close-modal" aria-label="Fechar">×</button><p class="eyebrow">${person ? 'Editar' : 'Nova pessoa'}</p><h2>${person ? escape(person.fullName) : 'Quem você quer cadastrar?'}</h2><form id="person-form"><input type="hidden" name="personId" value="${escape(person?.id || '')}"><label>Nome completo<input name="fullName" value="${escape(person?.fullName || '')}" required autofocus></label><label>Tipo principal<select name="primaryType">${personTypes().map(([value,label]) => `<option value="${value}" ${person?.primaryType === value ? 'selected' : ''}>${label}</option>`).join('')}</select></label><label>Vínculo ou função<input name="relationship" value="${escape(person?.relationship || '')}" placeholder="Ex.: avó materna, pediatra"></label><div class="form-grid"><label>Telefone<input name="phone" inputmode="tel" value="${escape(person?.phone || '')}"></label><label>WhatsApp<input name="whatsapp" inputmode="tel" value="${escape(person?.whatsapp || '')}"></label></div><label>E-mail<input name="email" type="email" value="${escape(person?.email || '')}"></label><label>Foto<input name="personPhoto" type="file" accept="image/*"></label><details class="advanced-fields"><summary>Mais informações</summary><label>Endereço<input name="address" value="${escape(person?.address?.formatted || '')}"></label><div class="form-grid"><label>Latitude<input name="latitude" inputmode="decimal" value="${escape(person?.address?.latitude ?? '')}"></label><label>Longitude<input name="longitude" inputmode="decimal" value="${escape(person?.address?.longitude ?? '')}"></label></div><label>Prioridade<input name="priority" type="number" min="0" max="99" value="${escape(person?.priority ?? 0)}"></label><label>Observações<textarea name="notes" rows="3">${escape(person?.notes || '')}</textarea></label><fieldset class="choice-field"><legend>Também é</legend><label class="check-row"><input type="checkbox" name="extraTypes" value="emergency-contact" ${types.has('emergency-contact') ? 'checked' : ''}> Contato de emergência</label><label class="check-row"><input type="checkbox" name="extraTypes" value="pickup-authorized" ${types.has('pickup-authorized') ? 'checked' : ''}> Autorizada a buscar</label><label class="check-row"><input type="checkbox" name="extraTypes" value="pickup-denied" ${types.has('pickup-denied') ? 'checked' : ''}> Não autorizada a buscar</label></fieldset><label class="check-row"><input type="checkbox" name="active" ${person?.active === false ? '' : 'checked'}> Cadastro ativo</label><label class="check-row"><input type="checkbox" name="deviceEnabled" ${person?.deviceEnabled ? 'checked' : ''}> Pode usar este dispositivo</label></details><button class="button button--wide" type="submit">${person ? 'Salvar alterações' : 'Salvar pessoa'}</button></form></section></div>`;
 }
 
 async function savePerson(form) {
@@ -1092,7 +1270,8 @@ async function savePerson(form) {
     active: values.get('active') === 'on',
     relatedPersonIds: current?.relatedPersonIds || [],
     documentIds: current?.documentIds || [],
-    permissions: current?.permissions || []
+    permissions: current?.permissions || [],
+    deviceEnabled: values.get('deviceEnabled') === 'on'
   };
   const saved = current ? updateRecord('people', current.id, record, user.id) : addRecord('people', record, user.id);
   if (current && current.active !== false && saved.active === false) (data.users || []).filter((item) => item.personId === saved.id && item.active).forEach((item) => updateRecord('users', item.id, { active: false }, user.id));
@@ -1198,26 +1377,33 @@ function openAccessEditor(personId, userId = '') {
   if ((access?.role || access?.roleId) === 'admin') return notify('O administrador principal não pode ser alterado ou revogado nesta tela.', 'error');
   const person = personById(personId || access?.personId); if (!person) return notify('Pessoa não encontrada.', 'error');
   const grants = new Set(access?.permissions || []);
-  document.querySelector('#modal-root').innerHTML = `<div class="modal-backdrop" data-action="close-modal"><section class="modal" role="dialog" aria-modal="true" onclick="event.stopPropagation()"><button class="modal__close" data-action="close-modal" aria-label="Fechar">×</button><p class="eyebrow">Acesso ao app</p><h2>${escape(person.fullName)}</h2><form id="access-form"><input type="hidden" name="personId" value="${person.id}"><input type="hidden" name="userId" value="${escape(access?.id || '')}"><label>E-mail Microsoft<input name="email" type="email" value="${escape(access?.email || person.email || '')}" required></label><label>Papel<select name="role"><option value="guardian" ${(access?.role || access?.roleId) === 'guardian' ? 'selected' : ''}>Responsável</option><option value="caregiver" ${(access?.role || access?.roleId) === 'caregiver' ? 'selected' : ''}>Babá/cuidador(a)</option><option value="grandparent" ${(access?.role || access?.roleId) === 'grandparent' ? 'selected' : ''}>Avó/avô ou familiar</option><option value="visitor" ${(access?.role || access?.roleId) === 'visitor' ? 'selected' : ''}>Visitante</option><option value="custom" ${(access?.role || access?.roleId) === 'custom' ? 'selected' : ''}>Personalizado</option></select></label><details class="advanced-fields"><summary>Permissões personalizadas</summary><label class="check-row"><input type="checkbox" name="permissions" value="documents:view" ${grants.has('documents:view') ? 'checked' : ''}> Ver documentos liberados</label><label class="check-row"><input type="checkbox" name="permissions" value="vaccines:view" ${grants.has('vaccines:view') ? 'checked' : ''}> Ver vacinas</label><label class="check-row"><input type="checkbox" name="permissions" value="appointments:view" ${grants.has('appointments:view') ? 'checked' : ''}> Ver consultas</label><label class="check-row"><input type="checkbox" name="permissions" value="people:view" ${grants.has('people:view') ? 'checked' : ''}> Ver contatos essenciais</label></details><label class="check-row"><input type="checkbox" name="active" ${access?.active === false ? '' : 'checked'}> Acesso ativo</label><button class="button button--wide" type="submit">Salvar acesso</button>${access ? `<button class="button button--danger button--wide" type="button" data-action="revoke-user-access" data-id="${access.id}">Revogar acesso</button>` : ''}</form><p class="permission-note">Você também precisa compartilhar ou remover a pasta no OneDrive manualmente.</p></section></div>`;
+  document.querySelector('#modal-root').innerHTML = `<div class="modal-backdrop" data-action="close-modal"><section class="modal" role="dialog" aria-modal="true" onclick="event.stopPropagation()"><button class="modal__close" data-action="close-modal" aria-label="Fechar">×</button><p class="eyebrow">Acesso ao app</p><h2>${escape(person.fullName)}</h2><form id="access-form"><input type="hidden" name="personId" value="${person.id}"><input type="hidden" name="userId" value="${escape(access?.id || '')}"><label>E-mail Microsoft<input name="email" type="email" value="${escape(access?.email || person.email || '')}"></label><label>Papel<select name="role"><option value="guardian" ${(access?.role || access?.roleId) === 'guardian' ? 'selected' : ''}>Responsável</option><option value="caregiver" ${(access?.role || access?.roleId) === 'caregiver' ? 'selected' : ''}>Babá/cuidador(a)</option><option value="grandparent" ${(access?.role || access?.roleId) === 'grandparent' ? 'selected' : ''}>Avó/avô ou familiar</option><option value="visitor" ${(access?.role || access?.roleId) === 'visitor' ? 'selected' : ''}>Visitante</option><option value="custom" ${(access?.role || access?.roleId) === 'custom' ? 'selected' : ''}>Personalizado</option></select></label><details class="advanced-fields"><summary>Permissões personalizadas</summary><label class="check-row"><input type="checkbox" name="permissions" value="documents:view" ${grants.has('documents:view') ? 'checked' : ''}> Ver documentos liberados</label><label class="check-row"><input type="checkbox" name="permissions" value="vaccines:view" ${grants.has('vaccines:view') ? 'checked' : ''}> Ver vacinas</label><label class="check-row"><input type="checkbox" name="permissions" value="appointments:view" ${grants.has('appointments:view') ? 'checked' : ''}> Ver consultas</label><label class="check-row"><input type="checkbox" name="permissions" value="people:view" ${grants.has('people:view') ? 'checked' : ''}> Ver contatos essenciais</label></details><label>PIN de acesso (deixe vazio para manter)<input name="pin" type="password" inputmode="numeric" pattern="[0-9]{4,6}" minlength="4" maxlength="6" autocomplete="new-password"></label><label>Confirmar PIN<input name="pinConfirmation" type="password" inputmode="numeric" pattern="[0-9]{4,6}" minlength="4" maxlength="6" autocomplete="new-password"></label><label class="check-row"><input type="checkbox" name="deviceEnabled" ${access?.deviceEnabled ? 'checked' : ''}> Pode usar este dispositivo</label><label class="check-row"><input type="checkbox" name="active" ${access?.active === false ? '' : 'checked'}> Acesso ativo</label><button class="button button--wide" type="submit">Salvar acesso</button>${access ? `<button class="button button--danger button--wide" type="button" data-action="revoke-user-access" data-id="${access.id}">Revogar acesso</button>` : ''}</form><p class="permission-note">Você também precisa compartilhar ou remover a pasta no OneDrive manualmente.</p></section></div>`;
 }
 
-function saveAccess(form) {
+
+async function saveAccess(form) {
   if (!canCurrent('permissions:manage')) throw new Error('Seu perfil não pode administrar permissões.');
   const values = new FormData(form); const person = personById(String(values.get('personId'))); if (!person) throw new Error('Pessoa não encontrada.');
   const existing = String(values.get('userId') || '') ? (data.users || []).find((item) => item.id === String(values.get('userId'))) : (data.users || []).find((item) => item.personId === person.id);
   if (existing?.id === user.id || (existing?.role || existing?.roleId) === 'admin') throw new Error('O acesso do administrador principal não pode ser alterado nesta tela.');
-  upsertPersonAccess(person, existing, String(values.get('role') || 'visitor'), values.get('active') === 'on', String(values.get('email') || '').trim().toLowerCase(), values.getAll('permissions').map(String));
-  document.querySelector('#modal-root').innerHTML = ''; render(); notify('Permissões atualizadas.');
+  const pin = String(values.get('pin') || ''); const confirmation = String(values.get('pinConfirmation') || '');
+  if ((pin || confirmation) && (!validPin(pin) || pin !== confirmation)) throw new Error('Informe e confirme um PIN numérico igual, de 4 a 6 dígitos.');
+  const saved = upsertPersonAccess(person, existing, String(values.get('role') || 'visitor'), values.get('active') === 'on', String(values.get('email') || '').trim().toLowerCase(), values.getAll('permissions').map(String), values.get('deviceEnabled') === 'on');
+  if (pin) updateRecord('users', saved.id, { pinHash: await createPinHash(pin), pinUpdatedAt: new Date().toISOString() }, user.id);
+  updateRecord('people', person.id, { deviceEnabled: values.get('deviceEnabled') === 'on' }, user.id); if (getDeviceBinding()?.personId === person.id && values.get('deviceEnabled') !== 'on') { clearDeviceBinding(); deviceBinding = null; }
+  document.querySelector('#modal-root').innerHTML = ''; render(); notify('Permissões e acesso do dispositivo atualizados.');
 }
 
-function upsertPersonAccess(person, existing, role, active, email = person.email, permissions = existing?.permissions || []) {
+function upsertPersonAccess(person, existing, role, active, email = person.email, permissions = existing?.permissions || [], deviceEnabled = existing?.deviceEnabled === true) {
   if (role === 'admin' || existing?.id === user.id || (existing?.role || existing?.roleId) === 'admin') throw new Error('O administrador principal não pode ser alterado por este fluxo.');
-  if (!email) throw new Error('Informe o e-mail Microsoft da pessoa.');
-  const duplicate = (data.users || []).find((item) => item.email?.toLowerCase() === email.toLowerCase() && item.id !== existing?.id);
+  if (!email && !deviceEnabled) throw new Error('Informe o e-mail Microsoft ou habilite o uso somente neste dispositivo.');
+  const duplicate = email ? (data.users || []).find((item) => item.email?.toLowerCase() === email.toLowerCase() && item.id !== existing?.id) : null;
   if (duplicate) throw new Error('Este e-mail já está associado a outro usuário.');
-  const record = { personId: person.id, name: person.fullName, email: email.toLowerCase(), normalizedEmail: email.toLowerCase(), role, roleId: role, permissions, phone: person.phone || '', active };
-  if (existing) updateRecord('users', existing.id, record, user.id); else addRecord('users', record, user.id);
-  if (person.email !== email) updateRecord('people', person.id, { email }, user.id);
+  const normalizedEmail = email ? email.toLowerCase() : '';
+  const record = { personId: person.id, name: person.fullName, email: normalizedEmail, normalizedEmail, role, roleId: role, permissions, phone: person.phone || '', active, deviceEnabled };
+  const saved = existing ? updateRecord('users', existing.id, record, user.id) : addRecord('users', record, user.id);
+  if (email && person.email !== email) updateRecord('people', person.id, { email }, user.id);
+  return saved;
 }
 
 function revokeUserAccess(id) {
@@ -1565,6 +1751,7 @@ async function restoreBackupFromPrompt() {
     setDataBaseVersion(getDBVersion());
     data = await loadData(data);
     user = resolveAuthorizedUser(microsoftAccount);
+    microsoftUser = user;
     configurePersistence();
     saveData(data);
     render();
@@ -1696,7 +1883,8 @@ async function saveAttachment(form) {
     fileName: file.name,
     fileUrl: null,
     expirationDate: null,
-    sensitivity: 'sensitive'
+    sensitivity: 'sensitive',
+    caregiverVisible: formData.get('caregiverVisible') === 'on'
   }, user.id);
   form.reset();
   render();
@@ -1736,6 +1924,6 @@ function bindConnectivity() {
   window.addEventListener('offline', update);
 }
 function registerServiceWorker() {
-  if ('serviceWorker' in navigator) navigator.serviceWorker.register('./service-worker.js?v=15').catch(() => {});
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('./service-worker.js?v=16').catch(() => {});
 }
 

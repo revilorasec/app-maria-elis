@@ -1,4 +1,4 @@
-import { ensureFolder, getFileMetadata, graphFetch, graphJson, itemPath, putFile } from './graph.js?v=15';
+import { ensureFolder, getFileMetadata, graphFetch, graphJson, itemPath, putFile } from './graph.js?v=16';
 
 export const DEFAULT_ADMIN_FOLDER = '(APP MARIA ELIS - ADMIN)';
 

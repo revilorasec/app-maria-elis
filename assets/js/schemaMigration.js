@@ -1,4 +1,4 @@
-const SCHEMA_VERSION = 2;
+const SCHEMA_VERSION = 3;
 
 /**
  * Migra, em memória, um banco legado para o schema 2.
@@ -59,6 +59,11 @@ export function migrateSchemaV2(data) {
     }
   }
 
+  for (const user of data.users) {
+    user.deviceEnabled = user.deviceEnabled === true;
+    if (!user.pinHash || typeof user.pinHash !== 'object' || !user.pinHash.salt || !user.pinHash.digest) delete user.pinHash;
+  }
+  data.meta.deviceAccessSchemaVersion = 1;
   removeEmptyPrivateCaregiverFields(data);
 
   if (typeof data.meta.bootstrapCompleted !== 'boolean') {

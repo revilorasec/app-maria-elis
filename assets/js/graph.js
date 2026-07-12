@@ -1,4 +1,4 @@
-import { getAccessToken } from './auth.js?v=15';
+import { getAccessToken } from './auth.js?v=16';
 
 const GRAPH_ROOT = 'https://graph.microsoft.com/v1.0';
 

@@ -1,4 +1,4 @@
-import { ensureFolder, getFileMetadata, graphFetch, graphJson, itemPath, putFile, resolveRootFolder } from './graph.js?v=15';
+import { ensureFolder, getFileMetadata, graphFetch, graphJson, itemPath, putFile, resolveRootFolder } from './graph.js?v=16';
 
 const LEGACY_BACKUP_KEY = 'maria-onedrive-last-backup';
 const BACKUP_KEY_PREFIX = 'maria-onedrive-last-backup:';
