@@ -120,9 +120,10 @@
 
                    ],
     "meta":  {
-                 "schemaVersion":  2,
+                 "schemaVersion":  3,
                  "bootstrapCompleted":  false,
-                 "privacyMigrationVersion":  1
+                 "privacyMigrationVersion":  1,
+                 "deviceAccessSchemaVersion":  1
              },
     "people":  [
 
