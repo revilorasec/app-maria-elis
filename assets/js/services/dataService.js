@@ -1,35 +1,106 @@
-const CACHE_KEY = 'maria-onedrive-cache-v1';
+const LEGACY_CACHE_KEY = 'maria-onedrive-cache-v1';
+const CACHE_PREFIX = 'maria-onedrive-cache-v2:';
+
+let namespace = null;
+let baseVersion = null;
 let state;
+let dirty = false;
+let revision = 0;
+let contextVersion = 0;
 let saveRemote = null;
 let saveError = null;
 let syncQueue = Promise.resolve();
 
-export async function loadData(initialData) {
+export function setDataNamespace(nextNamespace) {
+  const normalized = normalizeNamespace(nextNamespace);
+  localStorage.removeItem(LEGACY_CACHE_KEY);
+  if (normalized === namespace) return normalized;
+
+  namespace = normalized;
+  baseVersion = null;
+  state = undefined;
+  dirty = false;
+  revision = 0;
+  contextVersion += 1;
+  saveRemote = null;
+  saveError = null;
+  return normalized;
+}
+
+export function preserveLegacyPendingNamespace(legacyNamespace) {
+  const oldNamespace = normalizeNamespace(legacyNamespace);
+  const oldKey = CACHE_PREFIX + encodeURIComponent(oldNamespace);
+  const newKey = currentCacheKey();
+  if (!newKey || oldKey === newKey || localStorage.getItem(newKey)) return false;
+  const raw = localStorage.getItem(oldKey);
+  if (!raw) return false;
+  try {
+    const envelope = JSON.parse(raw);
+    if (!envelope?.state || envelope.dirty !== true) return false;
+    localStorage.setItem(newKey, JSON.stringify({ ...envelope, baseVersion: null, requiresReview: true, migratedFromNamespace: oldNamespace, updatedAt: new Date().toISOString() }));
+    localStorage.removeItem(oldKey);
+    return true;
+  } catch {
+    return false;
+  }
+}
+export async function loadInitialData() {
+  const response = await fetch('data/data.sample.json', { cache: 'no-store' });
+  if (!response.ok) throw new Error('Não foi possível carregar a estrutura inicial do app.');
+  return hydrateForToday(await response.json());
+}
+
+export async function loadData(initialData, { preferPending = false, markDirty = false } = {}) {
+  localStorage.removeItem(LEGACY_CACHE_KEY);
+  const cached = readLocalEnvelope();
+
   if (initialData) {
+    if (preferPending && cached?.dirty) {
+      state = cached.state;
+      baseVersion = cached.baseVersion || baseVersion;
+      dirty = true;
+      revision += 1;
+      return state;
+    }
+
     state = initialData;
+    dirty = Boolean(markDirty);
+    revision += 1;
     persistLocal();
     return state;
   }
+
   if (state) return state;
-  const cached = localStorage.getItem(CACHE_KEY);
   if (cached) {
-    try {
-      state = JSON.parse(cached);
-      return state;
-    } catch {
-      localStorage.removeItem(CACHE_KEY);
-    }
+    state = cached.state;
+    baseVersion = cached.baseVersion || null;
+    dirty = cached.dirty;
+    revision += 1;
+    return state;
   }
-  const response = await fetch('data/data.sample.json', { cache: 'no-store' });
-  if (!response.ok) throw new Error('Não foi possível carregar a estrutura inicial do app.');
-  state = hydrateForToday(await response.json());
+
+  state = await loadInitialData();
+  dirty = false;
+  revision += 1;
   persistLocal();
   return state;
+}
+
+export function getPendingChanges() {
+  const cached = readLocalEnvelope();
+  return cached?.dirty ? structuredClone(cached) : null;
+}
+
+export function setDataBaseVersion(version) {
+  baseVersion = String(version || '');
+  if (state) persistLocal();
+  return baseVersion;
 }
 
 export function setPersistence({ save, onError } = {}) {
   saveRemote = typeof save === 'function' ? save : null;
   saveError = typeof onError === 'function' ? onError : null;
+  if (saveRemote && dirty && state) queueRemoteSave();
 }
 
 export function getData() {
@@ -45,7 +116,7 @@ export function saveData(nextState) {
 
 export function addRecord(collection, record, userId) {
   if (!Array.isArray(state?.[collection])) state[collection] = [];
-  const item = { id: record.id || (collection + '-' + crypto.randomUUID()), ...record, createdBy: userId, createdAt: new Date().toISOString() };
+  const item = { id: record.id || (collection + '-' + crypto.randomUUID()), ...record, createdBy: record.createdBy || userId, createdAt: record.createdAt || new Date().toISOString() };
   state[collection].unshift(item);
   appendAudit('create', collection, item.id, userId, null, item);
   persist();
@@ -70,13 +141,25 @@ export function removeRecord(collection, id, userId) {
   persist();
   return removed;
 }
+
 export async function flushPersistence() {
   await syncQueue;
 }
 
+export function hasPendingChanges() {
+  if (dirty) return true;
+  return Boolean(readLocalEnvelope()?.dirty);
+}
+
 export function resetLocalCache() {
-  localStorage.removeItem(CACHE_KEY);
+  const key = currentCacheKey();
+  if (key) localStorage.removeItem(key);
+  localStorage.removeItem(LEGACY_CACHE_KEY);
   state = undefined;
+  baseVersion = null;
+  dirty = false;
+  revision += 1;
+  contextVersion += 1;
 }
 
 function appendAudit(action, entityType, entityId, userId, oldValue, newValue) {
@@ -94,17 +177,70 @@ function appendAudit(action, entityType, entityId, userId, oldValue, newValue) {
 }
 
 function persist() {
+  dirty = true;
+  revision += 1;
   persistLocal();
-  if (!saveRemote) return;
+  if (saveRemote) queueRemoteSave();
+}
+
+function queueRemoteSave() {
   const snapshot = structuredClone(state);
+  const snapshotRevision = revision;
+  const snapshotContext = contextVersion;
+  const snapshotNamespace = namespace;
+  const remoteSaver = saveRemote;
+  const errorHandler = saveError;
+
   syncQueue = syncQueue
     .catch(() => {})
-    .then(() => saveRemote(snapshot))
-    .catch((error) => { if (saveError) saveError(error); });
+    .then(() => remoteSaver(snapshot))
+    .then(() => {
+      if (snapshotContext !== contextVersion || snapshotNamespace !== namespace || snapshotRevision !== revision) return;
+      dirty = false;
+      persistLocal();
+    })
+    .catch((error) => {
+      if (snapshotContext === contextVersion && snapshotNamespace === namespace) {
+        dirty = true;
+        persistLocal();
+      }
+      if (errorHandler) errorHandler(error);
+    });
 }
 
 function persistLocal() {
-  localStorage.setItem(CACHE_KEY, JSON.stringify(state));
+  const key = currentCacheKey();
+  if (!key || !state) return;
+  const envelope = { state, dirty, baseVersion, updatedAt: new Date().toISOString() };
+  localStorage.setItem(key, JSON.stringify(envelope));
+}
+
+function readLocalEnvelope() {
+  const key = currentCacheKey();
+  if (!key) return null;
+  const cached = localStorage.getItem(key);
+  if (!cached) return null;
+  try {
+    const envelope = JSON.parse(cached);
+    if (!envelope || typeof envelope !== 'object' || !envelope.state || typeof envelope.dirty !== 'boolean') {
+      localStorage.removeItem(key);
+      return null;
+    }
+    return envelope;
+  } catch {
+    localStorage.removeItem(key);
+    return null;
+  }
+}
+
+function currentCacheKey() {
+  return namespace ? CACHE_PREFIX + encodeURIComponent(namespace) : null;
+}
+
+function normalizeNamespace(value) {
+  const normalized = String(value || '').trim();
+  if (!normalized) throw new Error('Não foi possível identificar a conta e a pasta de dados para criar o cache local.');
+  return normalized;
 }
 
 function hydrateForToday(data) {

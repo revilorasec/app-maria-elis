@@ -1,4 +1,4 @@
-import { getAccessToken } from './auth.js';
+import { getAccessToken } from './auth.js?v=15';
 
 const GRAPH_ROOT = 'https://graph.microsoft.com/v1.0';
 
@@ -29,13 +29,9 @@ export async function graphJson(path, options) {
 
 export async function resolveRootFolder(folderName) {
   const root = await graphJson('/me/drive/root/children?$select=id,name,folder,remoteItem,parentReference&$top=999');
-  let item = root.value?.find((candidate) => candidate.name === folderName && (candidate.folder || candidate.remoteItem?.folder));
+  const item = root.value?.find((candidate) => candidate.name === folderName && (candidate.folder || candidate.remoteItem?.folder));
   if (!item) {
-    item = await graphJson('/me/drive/root/children', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: folderName, folder: {}, '@microsoft.graph.conflictBehavior': 'fail' })
-    });
+    throw new Error(`A pasta "${folderName}" não foi encontrada na raiz do OneDrive. Crie essa pasta ou compartilhe-a com esta conta. Se ela foi compartilhada, abra a pasta no OneDrive e escolha "Adicionar atalho aos Meus arquivos" antes de tentar novamente.`);
   }
   const remote = item.remoteItem;
   return remote

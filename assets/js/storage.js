@@ -1,13 +1,30 @@
-import { ensureFolder, getFileMetadata, graphFetch, graphJson, itemPath, putFile, resolveRootFolder } from './graph.js';
+import { ensureFolder, getFileMetadata, graphFetch, graphJson, itemPath, putFile, resolveRootFolder } from './graph.js?v=15';
+
+const LEGACY_BACKUP_KEY = 'maria-onedrive-last-backup';
+const BACKUP_KEY_PREFIX = 'maria-onedrive-last-backup:';
 
 let root = null;
 let dbEtag = null;
 let rawSnapshot = null;
 
 export async function connectOneDrive(folderName) {
+  root = null;
+  dbEtag = null;
+  rawSnapshot = null;
   root = await resolveRootFolder(folderName);
+  localStorage.removeItem(LEGACY_BACKUP_KEY);
   await Promise.all(['Backup', 'Fotos', 'Anexos', 'Config'].map((folder) => ensureFolder(root, folder)));
   return root;
+}
+
+export function getStorageIdentity() {
+  assertRoot();
+  return `${root.driveId}:${root.itemId}`;
+}
+
+export function getDBVersion() {
+  assertRoot();
+  return dbEtag || '';
 }
 
 export async function loadDB(initialData) {
@@ -22,8 +39,7 @@ export async function loadDB(initialData) {
   } catch (error) {
     if (error.status !== 404) throw error;
     const first = structuredClone(initialData);
-    await saveDB(first, { skipBackup: true });
-    return first;
+    return saveDB(first, { skipBackup: true });
   }
 }
 
@@ -31,7 +47,7 @@ export async function saveDB(data, { skipBackup = false } = {}) {
   assertRoot();
   if (!skipBackup && rawSnapshot) await backupDB();
   const next = structuredClone(data);
-  next.meta = { ...(next.meta || {}), updatedAt: new Date().toISOString(), lastBackupAt: localStorage.getItem('maria-onedrive-last-backup') || null };
+  next.meta = { ...(next.meta || {}), updatedAt: new Date().toISOString(), lastBackupAt: localStorage.getItem(backupStorageKey()) || null };
   const body = JSON.stringify(next, null, 2);
   const file = new Blob([body], { type: 'application/json' });
   try {
@@ -48,24 +64,52 @@ export async function saveDB(data, { skipBackup = false } = {}) {
 export async function backupDB() {
   assertRoot();
   const day = new Date().toISOString().slice(0, 10);
-  if (localStorage.getItem('maria-onedrive-last-backup') === day || !rawSnapshot) return false;
+  const backupKey = backupStorageKey();
+  if (localStorage.getItem(backupKey) === day || !rawSnapshot) return false;
   await putFile(root, `Backup/dados_${day}.json`, new Blob([rawSnapshot], { type: 'application/json' }), 'application/json');
-  localStorage.setItem('maria-onedrive-last-backup', day);
+  localStorage.setItem(backupKey, day);
   return true;
 }
 
 export async function restoreDB(relativePath) {
-  assertRoot();
-  const response = await graphFetch(`${itemPath(root, relativePath)}/content`);
-  if (!response.ok) throw new Error(`Não foi possível ler o backup (${response.status}).`);
-  const restored = JSON.parse(await response.text());
-  await saveDB(restored, { skipBackup: true });
-  return restored;
+  return readJsonFile(relativePath);
 }
 
 export async function uploadFile(relativePath, blob, mimeType) {
   assertRoot();
   return putFile(root, relativePath, blob, mimeType);
+}
+
+export async function downloadFile(relativePath) {
+  assertRoot();
+  const response = await graphFetch(`${itemPath(root, relativePath)}/content`);
+  if (!response.ok) throw new Error(`Não foi possível carregar a imagem (${response.status}).`);
+  return response.blob();
+}
+
+export async function listFiles(relativeFolder) {
+  assertRoot();
+  const result = await graphJson(`${itemPath(root, relativeFolder)}/children?$select=id,name,eTag,file,folder&$top=999`);
+  return result.value || [];
+}
+
+export async function readJsonFile(relativePath) {
+  assertRoot();
+  const response = await graphFetch(`${itemPath(root, relativePath)}/content`);
+  if (!response.ok) throw new Error(`Não foi possível ler ${relativePath} (${response.status}).`);
+  return JSON.parse(await response.text());
+}
+
+export async function writeJsonFile(relativePath, value, ifMatch) {
+  assertRoot();
+  return putFile(root, relativePath, new Blob([JSON.stringify(value, null, 2)], { type: 'application/json' }), 'application/json', ifMatch);
+}
+
+export async function deleteFile(relativePath) {
+  assertRoot();
+  const response = await graphFetch(itemPath(root, relativePath), { method: 'DELETE' });
+  if (!response.ok && response.status !== 404) throw new Error(`Não foi possível excluir ${relativePath} (${response.status}).`);
+  return true;
 }
 
 export async function getFileUrl(relativePath) {
@@ -80,4 +124,8 @@ export async function getRootWebUrl() {
 
 function assertRoot() {
   if (!root) throw new Error('Conecte ao OneDrive antes de acessar os arquivos.');
+}
+
+function backupStorageKey() {
+  return BACKUP_KEY_PREFIX + encodeURIComponent(getStorageIdentity());
 }

@@ -17,7 +17,7 @@ export async function resizeImage(file, maxSize = 1280, quality = 0.78) {
     context.fillRect(0, 0, canvas.width, canvas.height);
     context.drawImage(image, 0, 0, canvas.width, canvas.height);
     const blob = await new Promise((resolve, reject) => canvas.toBlob((value) => value ? resolve(value) : reject(new Error('Falha ao comprimir a foto.')), 'image/jpeg', quality));
-    return { blob, thumbnailUrl: canvas.toDataURL('image/jpeg', 0.65) };
+    return { blob, thumbnailUrl: '' };
   } finally { URL.revokeObjectURL(source); }
 }
 
@@ -34,8 +34,9 @@ export function queuePendingPhoto(entry) {
   return withStore('readwrite', (store) => store.put(entry));
 }
 
-export function listPendingPhotos() {
-  return withStore('readonly', (store) => store.getAll());
+export async function listPendingPhotos(namespace = '') {
+  const entries = await withStore('readonly', (store) => store.getAll());
+  return namespace ? entries.filter((entry) => entry.namespace === namespace) : entries.filter((entry) => !entry.namespace);
 }
 
 export function removePendingPhoto(id) {
