@@ -120,6 +120,20 @@
 
                    ],
     "meta":  {
+                 "schemaVersion":  2,
+                 "bootstrapCompleted":  false,
+                 "privacyMigrationVersion":  1
+             },
+    "people":  [
 
-             }
+               ],
+    "caregiverProfiles":  [
+
+                          ],
+    "accessGrants":  [
+
+                     ],
+    "trash":  [
+
+              ]
 }
