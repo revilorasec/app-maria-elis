@@ -6,7 +6,7 @@ Não usa Azure Functions, Blob Storage, banco externo, Key Vault, API própria, 
 
 ## Onde os dados ficam
 
-Após o login, o app cria ou usa esta estrutura na pasta configurada do OneDrive (padrão: `(APP MARIA ELIS)`):
+Após o login, o app usa a pasta configurada do OneDrive (padrão: `(APP MARIA ELIS)`). A pasta principal deve existir; o app cria somente `dados.json` e as subpastas internas:
 
 ```text
 (APP MARIA ELIS)/
@@ -25,10 +25,17 @@ Após o login, o app cria ou usa esta estrutura na pasta configurada do OneDrive
 
 1. Na primeira abertura, informe o **Application (client) ID**, o **Directory (tenant) ID** e o nome da pasta do OneDrive.
 2. Entre com a conta Microsoft.
-3. O app localiza/cria a pasta, cria as subpastas e carrega `dados.json`.
-4. Se ainda não houver `dados.json`, grava uma estrutura inicial fictícia e torna a primeira conta real o administrador.
-5. Cada alteração grava o JSON no OneDrive. Antes da primeira gravação do dia, o app faz uma cópia em `Backup/`.
+3. O app localiza a pasta principal já existente, cria as subpastas internas necessárias e carrega `dados.json`.
+4. Se ainda não houver `dados.json`, grava uma estrutura inicial vazia e torna a primeira conta real o administrador.
+5. Cada alteração é salva primeiro no cache isolado deste aparelho e depois enviada ao OneDrive com controle de versão. Antes da primeira gravação do dia, o app faz uma cópia em `Backup/`.
 6. Fotos são redimensionadas no celular e enviadas para `Fotos/AAAA/MM/`. Se o envio falhar, o registro permanece no aparelho e entra em uma fila de reenvio.
+
+
+## Fase 1 concluída
+
+A Fase 1 inclui dados da criança, Pessoas, cadastro de cuidador em cinco etapas, contatos, permissões básicas, remoção de exemplos, edição/exclusão das entidades desta fase, lixeira de 30 dias, schema v2 e cache seguro por versão do OneDrive.
+
+Saúde integrada e linha do tempo pertencem à Fase 2; receitas à Fase 3; galeria/vídeos à Fase 4; mapa e cartão offline à Fase 5; documentos completos, alertas, relatórios e manuais à Fase 6.
 
 ## Configurar o Microsoft Entra
 
@@ -47,12 +54,17 @@ A URI de redirecionamento precisa corresponder exatamente à URL que aparece no 
 ## Preparar o OneDrive e os usuários
 
 1. Entre no OneDrive da conta proprietária e crie `(APP MARIA ELIS)`.
-2. Abra o app, salve a configuração e entre com essa conta. Ele criará `dados.json`, `Backup`, `Fotos`, `Anexos` e `Config`.
+2. Abra o app, salve a configuração e entre com essa conta. Dentro da pasta principal existente, ele criará `dados.json`, `Backup`, `Fotos`, `Anexos` e `Config`.
 3. Para usar contas diferentes (por exemplo, responsáveis e babá), compartilhe essa pasta apenas com as contas autorizadas, com a permissão apropriada.
-4. Cada pessoa convidada deve adicionar um **atalho da pasta compartilhada em Meus arquivos** antes de abrir o app; assim a mesma pasta aparece na raiz do OneDrive dela. Sem esse atalho, o app pode criar uma pasta de mesmo nome separada.
-5. Depois do primeiro acesso, cadastre no `dados.json` os e-mails das pessoas autorizadas e seus papéis (`admin`, `guardian`, `caregiver` ou `visitor`). A proteção real é a permissão da pasta no OneDrive; os papéis controlam a interface do app.
+4. Cada pessoa convidada deve adicionar um **atalho da pasta compartilhada em Meus arquivos** antes de abrir o app; assim a mesma pasta aparece na raiz do OneDrive dela. Sem esse atalho, o app informa que a pasta não foi encontrada e não cria outra pasta silenciosamente.
+5. Depois do primeiro acesso, use **Mais > Pessoas** e **Usuários e permissões** para cadastrar nome, e-mail e papel (`guardian`, `caregiver`, `grandparent`, `visitor` ou `custom`). Não edite `dados.json` manualmente.
 
 Para a configuração mais simples, use sempre a mesma conta Microsoft da família no app. Para uma equipe, use a pasta compartilhada acima e valide o acesso com cada conta antes de cadastrar dados reais.
+### Pasta administrativa da babá
+
+CPF, RG, data de nascimento, salário, referências, contato pessoal, desligamento e documentos trabalhistas ficam em `(APP MARIA ELIS - ADMIN)`. Essa pasta é criada/localizada somente pela conta administradora. **Nunca compartilhe a pasta administrativa** com babá, visitante ou usuários da pasta principal.
+
+As permissões visuais do app organizam o uso, mas não impedem a leitura manual de um arquivo que foi compartilhado no OneDrive. A separação em duas pastas é a proteção dos dados administrativos.
 
 ## Publicar como site estático
 
@@ -77,7 +89,11 @@ assets/
   js/graph.js
   js/storage.js
   js/photos.js
+  js/schemaMigration.js
+  js/adminStorage.js
   js/ui.js
+  js/services/dataService.js
+  js/services/permissionsService.js
   icons/
 data/data.sample.json
 ```
@@ -87,3 +103,6 @@ data/data.sample.json
 O `.gitignore` bloqueia `dados.json`, `Backup/`, `Fotos/`, `Anexos/`, `Config/`, `dados_privados_origem/`, documentos, planilhas e arquivos `.env`.
 
 Antes de cada envio, confira `git status`. Não suba dados reais da criança, fotos, documentos, comprovantes, senhas, token, client secret ou cópia do OneDrive. O **client ID não é segredo**, mas o client secret nunca deve ser criado nem colocado no projeto.
+## Uso diário
+
+A tela **Hoje** prioriza os Afazeres do dia. Responsáveis criam a rotina; a babá abre cada afazer, marca o checklist, escreve a observação, envia foto e conclui. Documentos e saúde ficam em **Mais**. Veja [MIGRACAO_DADOS_ANTIGOS.md](MIGRACAO_DADOS_ANTIGOS.md) para importar dados privados já organizados.

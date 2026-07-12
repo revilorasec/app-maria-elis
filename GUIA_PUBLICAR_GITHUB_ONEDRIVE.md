@@ -5,7 +5,16 @@ Siga esta ordem. Você não precisa criar Azure Functions, Blob Storage, banco d
 ## Parte 1 — preparar os arquivos
 
 1. Abra a pasta `C:\Codex\Maria_Elis`.
-2. Confira se os arquivos de código existem: `index.html`, `manifest.json`, `service-worker.js`, `assets/` e `data/data.sample.json`.
+2. Confira se os arquivos de código existem. Para a Fase 1, envie mantendo exatamente estas pastas:
+
+   - raiz: `index.html`, `manifest.json`, `service-worker.js`;
+   - `assets/css/`: `styles.css`;
+   - `assets/js/`: `app.js`, `auth.js`, `graph.js`, `storage.js`, `photos.js`, `ui.js`, `migration.js`, `schemaMigration.js`, `adminStorage.js`;
+   - `assets/js/services/`: `dataService.js`, `permissionsService.js`, `notificationService.js`, `chartService.js`, `reportService.js`;
+   - `assets/icons/`: todos os ícones;
+   - `data/`: somente `data.sample.json`;
+   - documentação: `README.md`, `SECURITY.md`, `schema.md`, `CHANGELOG.md` e os guias `.md`.
+
 3. Não mova para esta pasta nenhuma foto, certidão, planilha, PDF ou `dados.json` real.
 4. Se estiver usando Git no computador, execute `git status` e confirme que `dados_privados_origem/`, fotos e arquivos privados não aparecem na lista para envio.
 
@@ -46,9 +55,10 @@ Se o portal informar que é necessária aprovação, peça ao administrador do M
 ## Parte 5 — preparar o OneDrive
 
 1. Entre no OneDrive da conta que será dona dos dados.
-2. Crie uma pasta chamada exatamente `(APP MARIA ELIS)`.
+2. Crie uma pasta chamada exatamente `(APP MARIA ELIS)`. O app não cria a pasta principal silenciosamente.
 3. Se outras pessoas forem usar suas próprias contas, compartilhe essa pasta somente com elas.
 4. Peça que cada pessoa convidada abra a pasta compartilhada no OneDrive e use **Adicionar atalho a Meus arquivos**.
+5. A pasta `(APP MARIA ELIS - ADMIN)` é separada. O app administrador a cria quando necessário para dados pessoais da babá. **Nunca compartilhe essa pasta administrativa.**
 
 ## Parte 6 — configurar e testar o app
 
@@ -59,10 +69,12 @@ Se o portal informar que é necessária aprovação, peça ao administrador do M
 5. Verifique no OneDrive se foram criados `dados.json`, `Backup/`, `Fotos/`, `Anexos/` e `Config/`.
 6. Faça um registro e uma foto de teste. Confira se a foto aparece em `Fotos/AAAA/MM/`.
 7. Na tela **Configurações**, confirme o estado **Sincronizado**.
+8. Com a conta administradora, abra **Configurações > Área administrativa**. Confirme que a pasta protegida existe e não está compartilhada.
 
 ## Quando algo der errado
 
 - **AADSTS50011:** a URL do navegador não está cadastrada exatamente como Redirect URI. Copie a URL publicada de novo e salve em **Authentication > SPA**.
 - **Não encontra a pasta compartilhada:** adicione o atalho dela em **Meus arquivos** e entre novamente.
 - **Foto pendente:** conecte à internet e toque em **Sincronizar** em Configurações.
+- **Há duas versões para revisar:** baixe primeiro a cópia deste aparelho; depois escolha usar a versão do OneDrive. O app não sobrescreve conflitos automaticamente.
 - **Acesso negado no Graph:** confira se `User.Read` e `Files.ReadWrite` foram adicionadas como permissões delegadas e se a conta tem acesso à pasta.
