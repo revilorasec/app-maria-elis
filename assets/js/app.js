@@ -1,4 +1,4 @@
-import { loadData, addRecord, updateRecord, removeRecord, saveData, resetLocalCache, localDate, setPersistence, flushPersistence } from './services/dataService.js?v=11';
+import { loadData, addRecord, updateRecord, removeRecord, saveData, resetLocalCache, localDate, setPersistence, flushPersistence } from './services/dataService.js?v=12';
 import { can, getRoleLabel } from './services/permissionsService.js';
 import { notify, offlineNotice } from './services/notificationService.js';
 import { lineChart, donutChart } from './services/chartService.js';
@@ -23,6 +23,8 @@ let oneDriveConfig;
 let microsoftAccount;
 let syncState = 'Conectando';
 let selectedTaskId = null;
+let selectedVaccineId = null;
+let pendingAvatarCrop = null;
 let historyFilter = { period: 'today', date: localDate(), type: '' };
 let lastMigrationReport = null;
 
@@ -69,9 +71,22 @@ async function init() {
 
 function normalizeLegacyData() {
   let changed = false;
-  const typeByCategory = { 'alimentação': 'Lanche', medicamento: 'Medicamento', sono: 'Sono', banho: 'Banho', atividade: 'Brincadeira', observação: 'Observação', sintoma: 'Sintoma' };
-  if (data.childProfile?.name === 'Criança Exemplo') { data.childProfile.name = 'Maria Elis'; changed = true; }
-  if (!Array.isArray(data.dailyTasks)) { data.dailyTasks = []; changed = true; }
+  const typeByCategory = { alimentação: 'Lanche', medicamento: 'Medicamento', sono: 'Sono', banho: 'Banho', atividade: 'Brincadeira', observação: 'Observação', sintoma: 'Sintoma' };
+  const collections = ['users', 'documents', 'vaccines', 'appointments', 'growthRecords', 'dailyInstructions', 'dailyTasks', 'dailyPhotos', 'dailyConfirmations', 'dailyComments', 'dailyLogs', 'medications', 'medicationAdministrations', 'emergencyContacts', 'doctors', 'attachments', 'auditLog'];
+  const isDemoRecord = (item) => {
+    const id = String(item?.id || '').toLowerCase();
+    const email = String(item?.email || '').toLowerCase();
+    return id.includes('-demo') || id.startsWith('demo-') || email.endsWith('.invalid');
+  };
+  for (const collection of collections) {
+    if (!Array.isArray(data[collection])) { data[collection] = []; changed = true; continue; }
+    const realRecords = data[collection].filter((item) => !isDemoRecord(item));
+    if (realRecords.length !== data[collection].length) { data[collection] = realRecords; changed = true; }
+  }
+  if (!data.childProfile || /exemplo|demonstra/i.test(String(data.childProfile.name || ''))) {
+    data.childProfile = { id: 'child-maria-elis', name: 'Maria Elis', birthDate: '', photoUrl: 'assets/icons/child-avatar.svg', healthPlan: '', bloodType: '', allergies: [], criticalNotes: '', address: '' };
+    changed = true;
+  }
   data.dailyTasks = data.dailyTasks.map((task) => {
     const next = { ...task };
     if (!next.taskType) { next.taskType = typeByCategory[next.category] || 'Outro'; changed = true; }
@@ -80,6 +95,8 @@ function normalizeLegacyData() {
     if (next.caregiverNote == null) { next.caregiverNote = ''; changed = true; }
     return next;
   });
+  if (!data.meta) { data.meta = {}; changed = true; }
+  if (!data.meta.demoCleanupAt) { data.meta.demoCleanupAt = new Date().toISOString(); changed = true; }
   return changed;
 }
 function resolveAuthorizedUser(account) {
@@ -155,6 +172,7 @@ function renderPage() {
     case 'more': return renderMore();
     case 'documents': return renderDocuments();
     case 'vaccines': return renderVaccines();
+    case 'vaccine-detail': return renderVaccineDetail();
     case 'appointments': return renderAppointments();
     case 'growth': return renderGrowth();
     case 'medications': return renderMedications();
@@ -222,11 +240,20 @@ function renderVaccines() {
   if (!allowed) return restrictedPage('Vacinas', 'O histórico de vacinação é visível somente para responsáveis autorizados.');
   const canManage = can(user.role, 'tasks:create');
   const records = [...(data.vaccines || [])].sort((a, b) => String(b.appliedDate || b.expectedDate || '').localeCompare(String(a.appliedDate || a.expectedDate || '')));
-  const examples = records.filter(isExampleVaccine);
-  return `${subPageHeading('Vacinas', 'Histórico, lotes e comprovantes privados.')}
-    ${canManage ? `<section class="settings-card"><div class="section-title"><div><p class="eyebrow">Responsáveis</p><h2>Adicionar vacina</h2></div></div><form id="vaccine-form" class="form-card"><label>Data da aplicação<input name="appliedDate" type="date" value="${localDate()}" required></label><div class="form-grid"><label>Vacina<input name="name" required placeholder="Ex.: Varicela"></label><label>Dose<input name="dose" required placeholder="Ex.: 2º ou Reforço"></label></div><div class="form-grid"><label>Lote<input name="batch" placeholder="Se disponível"></label><label>Local<input name="location" placeholder="Posto ou clínica"></label></div><label>Observação<textarea name="notes" rows="2" placeholder="Reação, orientação ou observação"></textarea></label><label>Comprovantes/fotos<input name="proofs" type="file" accept="image/*,application/pdf" multiple></label><button class="button button--wide" type="submit">Salvar vacina</button></form></section>` : ''}
-    ${canManage && examples.length ? `<button class="button button--danger button--wide" data-action="clear-example-vaccines">Apagar ${examples.length} vacina(s) de exemplo</button>` : ''}
-    <section class="section-block"><div class="section-title"><div><p class="eyebrow">${records.length} registro(s)</p><h2>Histórico</h2></div></div><div class="record-list">${records.map((vaccine) => { const proofPaths = vaccine.proofFilePaths || []; const expected = Number(vaccine.proofExpectedCount || 0); return `<article class="record-card"><span class="record-icon">◈</span><div><span class="status-pill ${statusClass(vaccine.status || 'applied')}">${statusLabel(vaccine.status || 'applied')}</span><h2>${escape(vaccine.name)}</h2><p>${escape(vaccine.dose)} · ${vaccine.appliedDate ? formatDate(vaccine.appliedDate) : 'Data não informada'}</p><small>${vaccine.batch ? `Lote: ${escape(vaccine.batch)}` : 'Lote não informado'}</small>${vaccine.notes ? `<small class="record-detail">${escape(vaccine.notes)}</small>` : ''}${proofPaths.length ? `<div class="inline-actions">${proofPaths.map((proof, index) => `<button class="text-button" data-action="open-vaccine-proof" data-path="${escape(proof)}">Abrir comprovante ${index + 1}</button>`).join('')}</div>` : expected ? `<small class="record-detail">${expected} comprovante(s) aguardando envio</small>` : ''}</div>${canManage ? `<div class="record-card__actions"><button class="icon-button" data-action="edit-vaccine" data-id="${vaccine.id}" aria-label="Editar vacina">✎</button><button class="icon-button" data-action="delete-vaccine" data-id="${vaccine.id}" aria-label="Apagar vacina">×</button></div>` : ''}</article>`; }).join('') || emptyState('Nenhuma vacina cadastrada.', 'Adicione ou importe o histórico privado.', '')}</div></section>`;
+  return `${subPageHeading('Vacinas', 'Toque em uma vacina para abrir todos os dados e comprovantes.')}
+    ${canManage ? `<section class="settings-card"><div class="section-title"><div><p class="eyebrow">Responsáveis</p><h2>Adicionar vacina</h2></div></div><form id="vaccine-form" class="form-card"><label>Data da aplicação<input name="appliedDate" type="date" value="${localDate()}" required></label><div class="form-grid"><label>Vacina<input name="name" required placeholder="Ex.: Varicela"></label><label>Dose<input name="dose" required placeholder="Ex.: 2º ou Reforço"></label></div><div class="form-grid"><label>Lote<input name="batch" placeholder="Se disponível"></label><label>Local<input name="location" placeholder="Posto ou clínica"></label></div><label>Observação<textarea name="notes" rows="2"></textarea></label><label>Comprovantes/fotos (pode escolher várias)<input name="proofs" type="file" accept="image/*,application/pdf" multiple></label><button class="button button--wide" type="submit">Salvar vacina</button></form></section><section class="settings-card"><h2>Anexar as fotos já organizadas</h2><p class="muted">Selecione todas as fotos da pasta de vacinas de uma vez. O app identifica vacina e dose pelo nome do arquivo e aceita duas ou mais fotos por registro.</p><form id="vaccine-bulk-photo-form" class="form-card"><label>Selecionar a pasta inteira “comprovantes”<input name="vaccineProofDirectory" type="file" accept="image/*,application/pdf" webkitdirectory directory multiple></label><label>Ou selecionar várias fotos<input name="vaccineProofFiles" type="file" accept="image/*,application/pdf" multiple></label><button class="button button--secondary button--wide" type="submit">Importar e relacionar fotos</button></form></section>` : ''}
+    <section class="section-block"><div class="section-title"><div><p class="eyebrow">${records.length} registro(s)</p><h2>Histórico</h2></div></div><div class="record-list">${records.map((vaccine) => { const proofs = vaccine.proofFilePaths || []; return `<article class="record-card record-card--interactive"><span class="record-icon">◈</span><button class="record-card__main" data-action="open-vaccine" data-id="${vaccine.id}" aria-label="Abrir detalhes de ${escape(vaccine.name)}"><span class="status-pill ${statusClass(vaccine.status || 'applied')}">${statusLabel(vaccine.status || 'applied')}</span><h2>${escape(vaccine.name)}</h2><p>${escape(vaccine.dose)} · ${vaccine.appliedDate ? formatDate(vaccine.appliedDate) : 'Data não informada'}</p><small>${vaccine.batch ? `Lote: ${escape(vaccine.batch)}` : 'Lote não informado'} · ${proofs.length} comprovante(s)</small></button><span class="chevron">›</span></article>`; }).join('') || emptyState('Nenhuma vacina cadastrada.', 'Adicione ou importe o histórico privado.', '')}</div></section>`;
+}
+
+function renderVaccineDetail() {
+  const vaccine = (data.vaccines || []).find((item) => item.id === selectedVaccineId);
+  if (!vaccine) { currentPage = 'vaccines'; return renderVaccines(); }
+  const canManage = can(user.role, 'tasks:create');
+  const proofs = vaccine.proofFilePaths || [];
+  return `<section class="page-heading page-heading--sub"><button class="back-button" data-page="vaccines" aria-label="Voltar">‹</button><div><p class="eyebrow">${vaccine.appliedDate ? formatDate(vaccine.appliedDate) : 'Data não informada'}</p><h1>${escape(vaccine.name)}</h1><p class="muted">${escape(vaccine.dose)}</p></div></section>
+    <section class="task-detail-card vaccine-detail-card"><span class="status-pill ${statusClass(vaccine.status || 'applied')}">${statusLabel(vaccine.status || 'applied')}</span><dl class="detail-list"><div><dt>Data</dt><dd>${vaccine.appliedDate ? formatDate(vaccine.appliedDate) : 'Não informada'}</dd></div><div><dt>Dose</dt><dd>${escape(vaccine.dose || 'Não informada')}</dd></div><div><dt>Lote</dt><dd>${escape(vaccine.batch || 'Não informado')}</dd></div><div><dt>Local</dt><dd>${escape(vaccine.location || 'Não informado')}</dd></div><div><dt>Observações</dt><dd>${escape(vaccine.notes || 'Nenhuma observação')}</dd></div></dl></section>
+    <section class="section-block"><div class="section-title"><div><p class="eyebrow">${proofs.length} arquivo(s)</p><h2>Fotos e comprovantes</h2></div></div><div class="proof-grid">${proofs.map((proof, index) => `<button class="proof-card" data-action="open-vaccine-proof" data-path="${escape(proof)}"><span>▧</span><strong>Comprovante ${index + 1}</strong><small>Abrir arquivo</small></button>`).join('') || emptyState('Nenhuma foto anexada.', 'Use Editar vacina ou a importação em lote para incluir duas ou mais fotos.', '')}</div></section>
+    ${canManage ? `<section class="task-management"><button class="text-button" data-action="edit-vaccine" data-id="${vaccine.id}">Editar e anexar fotos</button><button class="text-button text-button--danger" data-action="delete-vaccine" data-id="${vaccine.id}">Apagar vacina</button></section>` : ''}`;
 }
 function renderAppointments() {
   const allowed = can(user.role, 'appointments:view');
@@ -305,13 +332,12 @@ function renderTaskDetail() {
 function renderChildData() {
   const canEdit = can(user.role, 'tasks:create'); const child = profile(); const doctor = data.doctors?.[0] || {};
   const contacts = (data.emergencyContacts || []).map((item) => `${item.name || ''} | ${item.relationship || ''} | ${item.phone || ''}`).join('\n');
-  return `${subPageHeading('Dados da criança', 'Informações fixas para a família e a babá.')}<form id="child-profile-form" class="form-card"><label>Nome<input name="name" value="${escape(child.name || '')}" ${canEdit ? '' : 'disabled'} required></label><label>Data de nascimento<input name="birthDate" type="date" value="${escape(child.birthDate || '')}" ${canEdit ? '' : 'disabled'}></label><label>Foto/avatar<input name="avatar" type="file" accept="image/*" capture="environment" ${canEdit ? '' : 'disabled'}></label><label>Alergias (separadas por vírgula)<textarea name="allergies" rows="2" ${canEdit ? '' : 'disabled'}>${escape((child.allergies || []).join(', '))}</textarea></label><label>Medicamentos importantes e cuidados especiais<textarea name="criticalNotes" rows="4" ${canEdit ? '' : 'disabled'}>${escape(child.criticalNotes || '')}</textarea></label><label>Convênio<input name="healthPlan" value="${escape(child.healthPlan || '')}" ${canEdit ? '' : 'disabled'}></label><label>Endereço<input name="address" value="${escape(child.address || '')}" ${canEdit ? '' : 'disabled'}></label><div class="form-grid"><label>Pediatra<input name="doctorName" value="${escape(doctor.name || '')}" ${canEdit ? '' : 'disabled'}></label><label>Telefone do pediatra<input name="doctorPhone" value="${escape(doctor.phone || '')}" ${canEdit ? '' : 'disabled'}></label></div><label>Contatos de emergência (um por linha: Nome | Relação | Telefone)<textarea name="emergencyContacts" rows="5" ${canEdit ? '' : 'disabled'}>${escape(contacts)}</textarea></label><button class="button button--wide" type="submit" ${canEdit ? '' : 'disabled'}>Salvar dados da criança</button></form>`;
+  return `${subPageHeading('Dados da criança', 'Informações fixas para a família e a babá.')}<form id="child-profile-form" class="form-card"><div class="profile-photo-row"><img src="${escape(child.photoUrl || 'assets/icons/child-avatar.svg')}" alt="Foto atual da criança"><div><strong>Foto do perfil</strong><p>Escolha uma foto e ajuste zoom e posição antes de salvar.</p></div></div><label>Nome<input name="name" value="${escape(child.name || '')}" ${canEdit ? '' : 'disabled'} required></label><label>Data de nascimento<input name="birthDate" type="date" value="${escape(child.birthDate || '')}" ${canEdit ? '' : 'disabled'}></label><label>Escolher nova foto<input name="avatar" type="file" accept="image/*" ${canEdit ? '' : 'disabled'}></label><p id="avatar-crop-status" class="permission-note">Depois de escolher, o editor de enquadramento será aberto.</p><label>Alergias (separadas por vírgula)<textarea name="allergies" rows="2" ${canEdit ? '' : 'disabled'}>${escape((child.allergies || []).join(', '))}</textarea></label><label>Medicamentos importantes e cuidados especiais<textarea name="criticalNotes" rows="4" ${canEdit ? '' : 'disabled'}>${escape(child.criticalNotes || '')}</textarea></label><label>Convênio<input name="healthPlan" value="${escape(child.healthPlan || '')}" ${canEdit ? '' : 'disabled'}></label><label>Endereço<input name="address" value="${escape(child.address || '')}" ${canEdit ? '' : 'disabled'}></label><div class="form-grid"><label>Pediatra<input name="doctorName" value="${escape(doctor.name || '')}" ${canEdit ? '' : 'disabled'}></label><label>Telefone do pediatra<input name="doctorPhone" value="${escape(doctor.phone || '')}" ${canEdit ? '' : 'disabled'}></label></div><label>Contatos de emergência (um por linha: Nome | Relação | Telefone)<textarea name="emergencyContacts" rows="5" ${canEdit ? '' : 'disabled'}>${escape(contacts)}</textarea></label><button class="button button--wide" type="submit" ${canEdit ? '' : 'disabled'}>Salvar dados da criança</button></form>`;
 }
 function renderUsers() {
   const canManage = can(user.role, 'tasks:create');
-  return `${subPageHeading('Usuários e permissões', 'Contas autorizadas no dados.json.')}<div class="record-list">${(data.users || []).map((item) => `<article class="record-card"><span class="record-icon">◉</span><div><h2>${escape(item.name)}</h2><p>${escape(item.email || '')}</p><small>${escape(getRoleLabel(item.role))} · ${item.active ? 'ativo' : 'inativo'}</small></div></article>`).join('')}</div>${canManage ? `<section class="settings-card"><h2>Adicionar pessoa autorizada</h2><form id="user-form" class="form-card"><label>Nome<input name="name" required></label><label>E-mail<input type="email" name="email" required></label><label>Papel<select name="role"><option value="guardian">Responsável</option><option value="caregiver">Babá/cuidador(a)</option><option value="visitor">Visitante</option></select></label><button class="button button--wide" type="submit">Adicionar usuário</button></form></section>` : ''}`;
+  return `${subPageHeading('Usuários e permissões', 'O e-mail e o papel controlam o que cada pessoa pode fazer no app.')}<section class="settings-card permission-guide"><h2>Como liberar uma pessoa</h2><ol><li>No OneDrive, compartilhe a pasta <strong>${escape(oneDriveConfig.folderName)}</strong> com o e-mail exato da pessoa e marque <strong>Pode editar</strong>.</li><li>Peça para ela abrir a pasta compartilhada e escolher <strong>Adicionar atalho aos Meus arquivos</strong>.</li><li>Aqui no app, adicione o mesmo e-mail e escolha o papel.</li><li>No aparelho dela, configure o mesmo Client ID, Tenant ID e nome da pasta; depois entre com esse e-mail Microsoft.</li></ol><p class="permission-note"><strong>Importante:</strong> cadastrar apenas aqui não compartilha o OneDrive. As duas permissões são necessárias.</p><dl class="role-guide"><div><dt>Responsável</dt><dd>Administra dados, vacinas, documentos, tarefas e usuários.</dd></div><div><dt>Babá/cuidador(a)</dt><dd>Executa tarefas, registra observações e fotos, com acesso privado limitado.</dd></div><div><dt>Visitante</dt><dd>Somente leitura das áreas liberadas.</dd></div></dl></section><div class="record-list">${(data.users || []).map((item) => `<article class="record-card"><span class="record-icon">◉</span><div><h2>${escape(item.name)}</h2><p>${escape(item.email || '')}</p><small>${escape(getRoleLabel(item.role))} · ${item.active ? 'ativo' : 'inativo'}</small></div></article>`).join('') || emptyState('Nenhuma pessoa cadastrada.', 'O primeiro login Microsoft se torna o administrador.', '')}</div>${canManage ? `<section class="settings-card"><h2>Adicionar pessoa autorizada</h2><form id="user-form" class="form-card"><label>Nome<input name="name" required></label><label>E-mail Microsoft<input type="email" name="email" required></label><label>Papel<select name="role"><option value="guardian">Responsável</option><option value="caregiver">Babá/cuidador(a)</option><option value="visitor">Visitante</option></select></label><button class="button button--wide" type="submit">Adicionar usuário</button></form></section>` : ''}`;
 }
-
 function renderMigration() {
   const canImport = can(user.role, 'tasks:create');
   return `${subPageHeading('Importar dados antigos', 'Importação idempotente de um pacote JSON privado.')}<section class="settings-card"><p>Selecione um pacote JSON preparado conforme o guia de migração. O app ignora itens com o mesmo ID ou caminho e registra um relatório no dados.json.</p>${canImport ? `<form id="migration-form" class="form-card"><label>Pacote de migração<input name="legacyBundle" type="file" accept="application/json,.json" required></label><button class="button button--wide" type="submit">Importar pacote</button></form>` : '<p class="permission-note">Somente responsáveis podem importar dados.</p>'}</section>${lastMigrationReport ? `<section class="settings-card"><h2>Último relatório</h2><p>${escape(migrationReportText(lastMigrationReport))}</p>${lastMigrationReport.warnings?.length ? `<p class="permission-note">${escape(lastMigrationReport.warnings.join(' '))}</p>` : ''}</section>` : ''}`;
@@ -385,7 +411,7 @@ function iconFor(type) { return ({ alimentação: '◌', sono: '☾', medicament
 document.addEventListener('click', async (event) => {
   const control = event.target.closest('[data-page], [data-quick], [data-register-type], [data-action]');
   if (!control || control.disabled) return;
-  if (control.dataset.page) { currentPage = control.dataset.page; if (currentPage !== 'task-detail') selectedTaskId = null; render(); window.scrollTo({ top: 0, behavior: 'smooth' }); return; }
+  if (control.dataset.page) { currentPage = control.dataset.page; if (currentPage !== 'task-detail') selectedTaskId = null; if (currentPage !== 'vaccine-detail') selectedVaccineId = null; render(); window.scrollTo({ top: 0, behavior: 'smooth' }); return; }
   if (control.dataset.quick) { selectedRegisterType = control.dataset.quick; currentPage = 'register'; render(); return; }
   if (control.dataset.registerType) { selectedRegisterType = control.dataset.registerType; render(); return; }
   try {
@@ -399,9 +425,11 @@ document.addEventListener('click', async (event) => {
       case 'open-onedrive': window.open(await getRootWebUrl(), '_blank', 'noopener'); break;
       case 'open-document': window.open(await getFileUrl(control.dataset.path), '_blank', 'noopener'); break;
       case 'open-vaccine-proof': window.open(await getFileUrl(control.dataset.path), '_blank', 'noopener'); break;
+      case 'open-vaccine': selectedVaccineId = control.dataset.id; currentPage = 'vaccine-detail'; render(); window.scrollTo({ top: 0, behavior: 'smooth' }); break;
       case 'edit-vaccine': openVaccineEditor(control.dataset.id); break;
       case 'delete-vaccine': deleteVaccine(control.dataset.id); break;
       case 'clear-example-vaccines': clearExampleVaccines(); break;
+      case 'confirm-avatar-crop': await confirmAvatarCrop(); break;
       case 'restore-backup': await restoreBackupFromPrompt(); break;
       case 'open-task': selectedTaskId = control.dataset.id; currentPage = 'task-detail'; render(); window.scrollTo({ top: 0, behavior: 'smooth' }); break;
       case 'toggle-checklist': toggleTaskChecklist(control.dataset.taskId, Number(control.dataset.index), control.checked); break;
@@ -428,9 +456,21 @@ document.addEventListener('submit', async (event) => {
     if (event.target.id === 'user-form') saveUser(event.target);
     if (event.target.id === 'migration-form') await importMigrationBundle(event.target);
     if (event.target.id === 'vaccine-form') await saveVaccine(event.target);
+    if (event.target.id === 'vaccine-bulk-photo-form') await importVaccineProofs(event.target);
     if (event.target.id === 'history-filter-form') saveHistoryFilter(event.target);
   } catch (error) { notify(error.message, 'error'); }
 });
+document.addEventListener('input', (event) => {
+  if (!event.target.matches('[data-avatar-control]') || !pendingAvatarCrop) return;
+  pendingAvatarCrop[event.target.dataset.avatarControl] = Number(event.target.value);
+  drawAvatarCrop();
+});
+document.addEventListener('change', async (event) => {
+  if (event.target.matches('input[name="avatar"]') && event.target.files?.[0]) {
+    try { await openAvatarEditor(event.target.files[0]); } catch (error) { notify(error.message, 'error'); }
+  }
+});
+
 async function saveTask(form) {
   if (!can(user.role, 'tasks:create')) throw new Error('Seu perfil não pode criar ou editar afazeres.');
   const values = new FormData(form); const taskId = values.get('taskId'); const taskType = String(values.get('taskType') || 'Outro');
@@ -474,11 +514,52 @@ async function saveChildProfile(form) {
   if (!can(user.role, 'tasks:create')) throw new Error('Seu perfil não pode editar os dados da criança.');
   const values = new FormData(form); const updated = { ...profile(), name: String(values.get('name')).trim(), birthDate: String(values.get('birthDate') || ''), allergies: String(values.get('allergies') || '').split(',').map((item) => item.trim()).filter(Boolean), criticalNotes: String(values.get('criticalNotes') || '').trim(), healthPlan: String(values.get('healthPlan') || '').trim(), address: String(values.get('address') || '').trim() };
   const contactLines = String(values.get('emergencyContacts') || '').split(/\r?\n/).map((line) => line.split('|').map((part) => part.trim())).filter((parts) => parts[0]);
-  data.emergencyContacts = contactLines.map((parts, index) => ({ id: data.emergencyContacts?.[index]?.id || `contact-${crypto.randomUUID()}`, name: parts[0], relationship: parts[1] || 'Contato', phone: parts[2] || '', whatsapp: parts[2] || '', priority: index + 1, notes: '' }));
+  data.emergencyContacts = contactLines.map((parts, index) => ({ id: data.emergencyContacts?.[index]?.id || 'contact-' + crypto.randomUUID(), name: parts[0], relationship: parts[1] || 'Contato', phone: parts[2] || '', whatsapp: parts[2] || '', priority: index + 1, notes: '' }));
   const doctorName = String(values.get('doctorName') || '').trim(); const doctorPhone = String(values.get('doctorPhone') || '').trim();
-  if (doctorName || doctorPhone) data.doctors = [{ ...(data.doctors?.[0] || { id: `doctor-${crypto.randomUUID()}`, specialty: 'Pediatria', clinic: '', address: '', notes: '' }), name: doctorName, phone: doctorPhone, specialty: 'Pediatria' }];
-  const avatar = values.get('avatar'); if (avatar?.size) { const compressed = await resizeImage(avatar, 512, 0.8); const filePath = `Anexos/Perfil/avatar_${Date.now()}.jpg`; await uploadFile(filePath, compressed.blob, 'image/jpeg'); updated.photoUrl = compressed.thumbnailUrl; updated.avatarPath = filePath; }
-  data.childProfile = updated; saveData(data); render(); notify('Dados da criança atualizados.');
+  if (doctorName || doctorPhone) data.doctors = [{ ...(data.doctors?.[0] || { id: 'doctor-' + crypto.randomUUID(), specialty: 'Pediatria', clinic: '', address: '', notes: '' }), name: doctorName, phone: doctorPhone, specialty: 'Pediatria' }];
+  const avatar = values.get('avatar');
+  if (avatar?.size) {
+    if (!pendingAvatarCrop?.blob || pendingAvatarCrop.fileName !== avatar.name) throw new Error('Abra a foto e confirme o enquadramento antes de salvar.');
+    const filePath = 'Anexos/Perfil/avatar_' + Date.now() + '.jpg';
+    await uploadFile(filePath, pendingAvatarCrop.blob, 'image/jpeg');
+    updated.photoUrl = pendingAvatarCrop.thumbnailUrl;
+    updated.avatarPath = filePath;
+  }
+  data.childProfile = updated; pendingAvatarCrop = null; saveData(data); render(); notify('Dados da criança atualizados.');
+}
+
+async function openAvatarEditor(file) {
+  if (!file.type.startsWith('image/')) throw new Error('Escolha um arquivo de imagem.');
+  const objectUrl = URL.createObjectURL(file);
+  const image = new Image();
+  await new Promise((resolve, reject) => { image.onload = resolve; image.onerror = () => reject(new Error('Não foi possível abrir a foto.')); image.src = objectUrl; });
+  pendingAvatarCrop = { fileName: file.name, image, objectUrl, zoom: 1, panX: 0, panY: 0, blob: null, thumbnailUrl: null };
+  document.querySelector('#modal-root').innerHTML = '<div class="modal-backdrop"><section class="modal avatar-crop-editor" role="dialog" aria-modal="true"><button class="modal__close" data-action="close-modal" aria-label="Fechar">×</button><h2>Editar foto do perfil</h2><p class="muted">A área quadrada mostra exatamente o que aparecerá no app.</p><canvas id="avatar-crop-canvas" width="512" height="512" aria-label="Prévia do enquadramento"></canvas><label>Zoom<input data-avatar-control="zoom" type="range" min="1" max="3" step="0.05" value="1"></label><label>Posição horizontal<input data-avatar-control="panX" type="range" min="-100" max="100" step="1" value="0"></label><label>Posição vertical<input data-avatar-control="panY" type="range" min="-100" max="100" step="1" value="0"></label><button class="button button--wide" data-action="confirm-avatar-crop">Usar este enquadramento</button></section></div>';
+  drawAvatarCrop();
+}
+
+function drawAvatarCrop() {
+  const canvas = document.querySelector('#avatar-crop-canvas');
+  if (!canvas || !pendingAvatarCrop?.image) return;
+  const context = canvas.getContext('2d'); const image = pendingAvatarCrop.image; const size = canvas.width;
+  const scale = Math.max(size / image.width, size / image.height) * pendingAvatarCrop.zoom;
+  const width = image.width * scale; const height = image.height * scale;
+  const maxX = Math.max(0, (width - size) / 2); const maxY = Math.max(0, (height - size) / 2);
+  const x = (size - width) / 2 + (pendingAvatarCrop.panX / 100) * maxX;
+  const y = (size - height) / 2 + (pendingAvatarCrop.panY / 100) * maxY;
+  context.clearRect(0, 0, size, size); context.drawImage(image, x, y, width, height);
+}
+
+async function confirmAvatarCrop() {
+  const canvas = document.querySelector('#avatar-crop-canvas');
+  if (!canvas || !pendingAvatarCrop) return;
+  pendingAvatarCrop.blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.86));
+  pendingAvatarCrop.thumbnailUrl = canvas.toDataURL('image/jpeg', 0.82);
+  URL.revokeObjectURL(pendingAvatarCrop.objectUrl);
+  document.querySelector('#modal-root').innerHTML = '';
+  const status = document.querySelector('#avatar-crop-status');
+  if (status) status.textContent = 'Enquadramento confirmado. Agora toque em “Salvar dados da criança”.';
+  notify('Enquadramento da foto confirmado.');
 }
 function saveUser(form) {
   if (!can(user.role, 'tasks:create')) throw new Error('Seu perfil não pode adicionar usuários.');
@@ -543,7 +624,7 @@ async function createPhoto({ file, caption, category, taskId = null, isImportant
   const photo = addRecord('dailyPhotos', {
     id,
     taskId,
-    instructionId: 'inst-demo-today',
+    instructionId: data.dailyInstructions.find((item) => item.date === localDate())?.id || null,
     date: localDate(),
     category,
     filePath: storageKey,
@@ -617,34 +698,91 @@ async function saveVaccine(form) {
   const current = vaccineId ? data.vaccines.find((item) => item.id === vaccineId) : null;
   if (!appliedDate || !String(values.get('name') || '').trim() || !String(values.get('dose') || '').trim()) throw new Error('Informe data, vacina e dose.');
   const proofPaths = [...(current?.proofFilePaths || [])];
-  for (const file of values.getAll('proofs')) { if (!file?.size) continue; const path = vaccineProofPath(file.name, appliedDate); await uploadFile(path, file, file.type || 'application/octet-stream'); proofPaths.push(path); }
-  const record = { name: String(values.get('name')).trim(), dose: String(values.get('dose')).trim(), appliedDate, expectedDate: appliedDate, batch: String(values.get('batch') || '').trim(), location: String(values.get('location') || '').trim(), notes: String(values.get('notes') || '').trim(), status: 'applied', proofFilePaths: proofPaths, proofExpectedCount: current?.proofExpectedCount || 0, proofStatus: proofPaths.length >= Number(current?.proofExpectedCount || 0) && proofPaths.length ? 'uploaded' : (current?.proofStatus || 'none') };
+  for (const file of values.getAll('proofs')) {
+    if (!file?.size) continue;
+    const path = vaccineProofPath(file.name, appliedDate);
+    await uploadFile(path, file, file.type || 'application/octet-stream');
+    if (!proofPaths.includes(path)) proofPaths.push(path);
+  }
+  const record = { name: String(values.get('name')).trim(), dose: String(values.get('dose')).trim(), appliedDate, expectedDate: appliedDate, batch: String(values.get('batch') || '').trim(), location: String(values.get('location') || '').trim(), notes: String(values.get('notes') || '').trim(), status: 'applied', proofFilePaths: proofPaths, proofExpectedCount: Math.max(proofPaths.length, Number(current?.proofExpectedCount || 0)), proofStatus: proofPaths.length ? 'uploaded' : 'none' };
   if (current) updateRecord('vaccines', current.id, record, user.id); else addRecord('vaccines', record, user.id);
-  document.querySelector('#modal-root').innerHTML = ''; render(); notify('Vacina salva.');
+  document.querySelector('#modal-root').innerHTML = '';
+  selectedVaccineId = current?.id || selectedVaccineId;
+  render(); notify('Vacina salva com ' + proofPaths.length + ' comprovante(s).');
+}
+
+async function importVaccineProofs(form) {
+  if (!can(user.role, 'tasks:create')) throw new Error('Seu perfil não pode anexar comprovantes.');
+  const formData = new FormData(form);
+  const files = [...formData.getAll('vaccineProofDirectory'), ...formData.getAll('vaccineProofFiles')].filter((file) => file?.size);
+  if (!files.length) throw new Error('Escolha uma ou mais fotos.');
+  const matched = new Map(); const unmatched = [];
+  for (const file of files) {
+    const vaccine = findVaccineForProof(file.name);
+    if (!vaccine) { unmatched.push(file.name); continue; }
+    const path = vaccineProofPath(file.name, vaccine.appliedDate || vaccine.expectedDate || localDate());
+    await uploadFile(path, file, file.type || 'application/octet-stream');
+    const paths = matched.get(vaccine.id) || [...(vaccine.proofFilePaths || [])];
+    if (!paths.includes(path)) paths.push(path);
+    matched.set(vaccine.id, paths);
+  }
+  for (const [id, paths] of matched) {
+    const vaccine = data.vaccines.find((item) => item.id === id);
+    updateRecord('vaccines', id, { proofFilePaths: paths, proofExpectedCount: Math.max(paths.length, Number(vaccine?.proofExpectedCount || 0)), proofStatus: 'uploaded' }, user.id);
+  }
+  form.reset(); render();
+  const uploaded = files.length - unmatched.length;
+  notify(unmatched.length ? uploaded + ' foto(s) anexada(s). ' + unmatched.length + ' arquivo(s) não puderam ser relacionados pelo nome.' : uploaded + ' foto(s) anexada(s) às vacinas corretas.');
+}
+
+function findVaccineForProof(fileName) {
+  const file = normalizeSearch(fileName);
+  const patterns = [
+    { prefix: 'triplice-dose-1', name: 'triplice', dose: '1' },
+    { prefix: 'varicela-dose-1', name: 'varicela', dose: '1' },
+    { prefix: 'meningo-b-reforco', name: 'meningo-b', dose: 'reforco' },
+    { prefix: 'pneumo-15-reforco', name: 'pneumo-15', dose: 'reforco' },
+    { prefix: 'meningo-acwy-reforco', name: 'meningo-acwy', dose: 'reforco' },
+    { prefix: 'pentavalente-reforco', name: 'pentavalente', dose: 'reforco' },
+    { prefix: 'varicela-dose-2', name: 'varicela', dose: '2' },
+    { prefix: 'influenza-dose-1', name: 'influenza', dose: '1' }
+  ];
+  const pattern = patterns.find((item) => file.includes(item.prefix));
+  if (!pattern) return null;
+  return (data.vaccines || []).find((item) => {
+    const vaccineName = normalizeSearch(item.name); const dose = normalizeSearch(item.dose);
+    const doseMatches = dose.includes(pattern.dose) || (pattern.dose === '1' && /(^|-)1($|-)/.test(dose)) || (pattern.dose === '2' && /(^|-)2($|-)/.test(dose));
+    return vaccineName.includes(pattern.name) && doseMatches;
+  }) || null;
+}
+
+function normalizeSearch(value) {
+  return String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 }
 
 function openVaccineEditor(id) {
   if (!can(user.role, 'tasks:create')) return notify('Seu perfil não pode editar vacinas.', 'error');
   const vaccine = data.vaccines.find((item) => item.id === id); if (!vaccine) return;
-  document.querySelector('#modal-root').innerHTML = `<div class="modal-backdrop" data-action="close-modal"><section class="modal" role="dialog" aria-modal="true" onclick="event.stopPropagation()"><button class="modal__close" data-action="close-modal" aria-label="Fechar">×</button><h2>Editar vacina</h2><form id="vaccine-form"><input type="hidden" name="vaccineId" value="${vaccine.id}"><label>Data da aplicação<input name="appliedDate" type="date" value="${escape(vaccine.appliedDate || '')}" required></label><div class="form-grid"><label>Vacina<input name="name" value="${escape(vaccine.name)}" required></label><label>Dose<input name="dose" value="${escape(vaccine.dose)}" required></label></div><div class="form-grid"><label>Lote<input name="batch" value="${escape(vaccine.batch || '')}"></label><label>Local<input name="location" value="${escape(vaccine.location || '')}"></label></div><label>Observação<textarea name="notes" rows="3">${escape(vaccine.notes || '')}</textarea></label><label>Adicionar comprovantes<input name="proofs" type="file" accept="image/*,application/pdf" multiple></label><button class="button button--wide" type="submit">Salvar alterações</button></form></section></div>`;
+  const proofCount = (vaccine.proofFilePaths || []).length;
+  document.querySelector('#modal-root').innerHTML = '<div class="modal-backdrop" data-action="close-modal"><section class="modal" role="dialog" aria-modal="true" onclick="event.stopPropagation()"><button class="modal__close" data-action="close-modal" aria-label="Fechar">×</button><h2>Editar vacina</h2><form id="vaccine-form"><input type="hidden" name="vaccineId" value="' + vaccine.id + '"><label>Data da aplicação<input name="appliedDate" type="date" value="' + escape(vaccine.appliedDate || '') + '" required></label><div class="form-grid"><label>Vacina<input name="name" value="' + escape(vaccine.name) + '" required></label><label>Dose<input name="dose" value="' + escape(vaccine.dose) + '" required></label></div><div class="form-grid"><label>Lote<input name="batch" value="' + escape(vaccine.batch || '') + '"></label><label>Local<input name="location" value="' + escape(vaccine.location || '') + '"></label></div><label>Observação<textarea name="notes" rows="3">' + escape(vaccine.notes || '') + '</textarea></label><label>Adicionar comprovantes (pode escolher vários)<input name="proofs" type="file" accept="image/*,application/pdf" multiple></label><p class="permission-note">' + proofCount + ' comprovante(s) já anexado(s).</p><button class="button button--wide" type="submit">Salvar alterações</button></form></section></div>';
 }
 
 function deleteVaccine(id) {
   if (!can(user.role, 'tasks:create')) return notify('Seu perfil não pode apagar vacinas.', 'error');
   const vaccine = data.vaccines.find((item) => item.id === id); if (!vaccine) return;
-  if (!window.confirm(`Apagar ${vaccine.name} (${vaccine.dose})?`)) return;
-  removeRecord('vaccines', id, user.id); render(); notify('Vacina apagada.');
+  if (!window.confirm('Apagar ' + vaccine.name + ' (' + vaccine.dose + ')?')) return;
+  removeRecord('vaccines', id, user.id); selectedVaccineId = null; currentPage = 'vaccines'; render(); notify('Vacina apagada.');
 }
 
 function clearExampleVaccines() {
   if (!can(user.role, 'tasks:create')) return notify('Seu perfil não pode apagar vacinas.', 'error');
   const examples = data.vaccines.filter(isExampleVaccine); if (!examples.length) return notify('Não há vacinas de exemplo.');
-  if (!window.confirm(`Apagar ${examples.length} vacina(s) de exemplo?`)) return;
+  if (!window.confirm('Apagar ' + examples.length + ' vacina(s) de exemplo?')) return;
   examples.forEach((item) => removeRecord('vaccines', item.id, user.id)); render(); notify('Vacinas de exemplo apagadas.');
 }
 
-function isExampleVaccine(vaccine) { return String(vaccine.id || '').startsWith('vac-demo') || /exemplo/i.test(`${vaccine.name || ''} ${vaccine.notes || ''}`); }
-function vaccineProofPath(fileName, date) { const [year, month] = date.split('-'); return `Anexos/Vacinas/${year}/${month}/${date}_${safeFileName(fileName)}`; }
+function isExampleVaccine(vaccine) { return String(vaccine.id || '').includes('-demo') || /exemplo/i.test(String(vaccine.name || '') + ' ' + String(vaccine.notes || '')); }
+function vaccineProofPath(fileName, date) { const parts = date.split('-'); return 'Anexos/Vacinas/' + parts[0] + '/' + parts[1] + '/' + date + '_' + safeFileName(fileName); }
 async function saveAttachment(form) {
   if (!can(user.role, 'documents:create')) throw new Error('Seu perfil não pode enviar documentos.');
   const formData = new FormData(form);
@@ -701,6 +839,6 @@ function bindConnectivity() {
   window.addEventListener('offline', update);
 }
 function registerServiceWorker() {
-  if ('serviceWorker' in navigator) navigator.serviceWorker.register('./service-worker.js?v=11').catch(() => {});
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('./service-worker.js?v=12').catch(() => {});
 }
 
