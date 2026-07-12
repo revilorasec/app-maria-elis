@@ -1,75 +1,125 @@
 {
-  "childProfile": {
-    "id": "child-maria-elis",
-    "name": "Maria Elis",
-    "birthDate": "2024-04-18",
-    "photoUrl": "assets/icons/child-avatar.svg",
-    "healthPlan": "Plano demonstrativo",
-    "bloodType": "Não informado",
-    "allergies": ["Nenhuma alergia registrada (exemplo)"],
-    "criticalNotes": "Dados fictícios. Em produção, mostrar apenas a usuários autorizados."
-  },
-  "users": [
-    { "id": "user-admin", "name": "Responsável Exemplo", "email": "responsavel@example.invalid", "phone": "", "role": "admin", "active": true, "createdAt": "2026-01-01T10:00:00Z" },
-    { "id": "user-caregiver", "name": "Cuidador(a) Exemplo", "email": "cuidador@example.invalid", "phone": "", "role": "caregiver", "active": true, "createdAt": "2026-01-02T10:00:00Z" },
-    { "id": "user-guardian", "name": "Responsável 2", "email": "familia@example.invalid", "phone": "", "role": "guardian", "active": true, "createdAt": "2026-01-03T10:00:00Z" }
-  ],
-  "roles": [
-    { "id": "admin", "name": "Admin", "permissions": ["*"] },
-    { "id": "guardian", "name": "Responsável", "permissions": ["dashboard:view", "instructions:*", "tasks:*", "logs:*", "documents:*", "vaccines:*", "appointments:*", "growth:*", "medications:*", "emergency:view", "reports:export", "photos:attach"] },
-    { "id": "caregiver", "name": "Cuidador", "permissions": ["dashboard:view", "instructions:view", "instructions:confirm", "tasks:view", "tasks:complete", "logs:create", "photos:attach", "emergency:view"] },
-    { "id": "visitor", "name": "Visitante", "permissions": ["dashboard:view", "instructions:view", "emergency:view"] }
-  ],
-  "documents": [
-    { "id": "doc-demo-1", "title": "Carteira de vacinação — exemplo", "category": "Vacinas", "description": "Documento fictício para demonstrar a organização.", "fileUrl": null, "expirationDate": "2030-12-31", "createdBy": "user-admin", "createdAt": "2026-01-01T10:00:00Z", "updatedAt": "2026-01-01T10:00:00Z", "sensitivity": "sensitive" },
-    { "id": "doc-demo-2", "title": "Plano de saúde — exemplo", "category": "Plano de saúde", "description": "Envie o arquivo para a pasta privada Anexos/ no OneDrive.", "fileUrl": null, "expirationDate": "2030-06-30", "createdBy": "user-admin", "createdAt": "2026-01-01T10:00:00Z", "updatedAt": "2026-01-01T10:00:00Z", "sensitivity": "sensitive" }
-  ],
-  "vaccines": [
-    { "id": "vac-demo-1", "name": "Vacina de exemplo A", "dose": "Dose 1", "expectedDate": "2026-06-02", "appliedDate": "2026-06-02", "location": "Clínica demonstrativa", "batch": "DEMO-001", "status": "applied", "proofFileUrl": null, "notes": "Registro fictício.", "createdBy": "user-admin", "createdAt": "2026-06-02T09:00:00Z" },
-    { "id": "vac-demo-2", "name": "Vacina de exemplo B", "dose": "Reforço", "expectedDate": "2026-08-21", "appliedDate": null, "location": "", "batch": "", "status": "upcoming", "proofFileUrl": null, "notes": "Confirme o calendário com profissional de saúde.", "createdBy": "user-admin", "createdAt": "2026-06-02T09:00:00Z" },
-    { "id": "vac-demo-3", "name": "Vacina de exemplo C", "dose": "Dose 2", "expectedDate": "2026-04-05", "appliedDate": null, "location": "", "batch": "", "status": "overdue", "proofFileUrl": null, "notes": "Exemplo de alerta visual.", "createdBy": "user-admin", "createdAt": "2026-01-01T09:00:00Z" }
-  ],
-  "appointments": [
-    { "id": "apt-demo-1", "specialty": "Pediatria", "doctorName": "Profissional Exemplo", "clinic": "Clínica demonstrativa", "date": "2026-08-07", "time": "10:30", "reason": "Acompanhamento periódico", "weight": 12.1, "height": 88.0, "headCircumference": null, "bmi": 15.63, "diagnosis": "", "medicalGuidance": "Informação fictícia. O app não substitui orientação médica.", "prescriptionFileUrl": null, "examFileUrl": null, "nextReturnDate": "2026-11-07", "status": "scheduled", "notes": "", "createdBy": "user-admin", "createdAt": "2026-06-01T10:00:00Z" },
-    { "id": "apt-demo-2", "specialty": "Oftalmologia", "doctorName": "Profissional Exemplo", "clinic": "Clínica demonstrativa", "date": "2026-05-10", "time": "09:00", "reason": "Avaliação de rotina", "weight": 11.6, "height": 85.0, "headCircumference": null, "bmi": 16.06, "diagnosis": "", "medicalGuidance": "Sem dados clínicos reais.", "prescriptionFileUrl": null, "examFileUrl": null, "nextReturnDate": null, "status": "completed", "notes": "", "createdBy": "user-admin", "createdAt": "2026-05-10T10:00:00Z" }
-  ],
-  "growthRecords": [
-    { "id": "growth-demo-1", "date": "2025-11-01", "weight": 10.2, "height": 79.0, "bmi": 16.34, "headCircumference": null, "source": "pediatra", "notes": "Fictício", "createdBy": "user-admin", "createdAt": "2025-11-01T10:00:00Z" },
-    { "id": "growth-demo-2", "date": "2026-02-01", "weight": 11.0, "height": 82.0, "bmi": 16.36, "headCircumference": null, "source": "pediatra", "notes": "Fictício", "createdBy": "user-admin", "createdAt": "2026-02-01T10:00:00Z" },
-    { "id": "growth-demo-3", "date": "2026-05-01", "weight": 11.6, "height": 85.0, "bmi": 16.06, "headCircumference": null, "source": "casa", "notes": "Fictício", "createdBy": "user-admin", "createdAt": "2026-05-01T10:00:00Z" },
-    { "id": "growth-demo-4", "date": "2026-07-01", "weight": 12.1, "height": 88.0, "bmi": 15.63, "headCircumference": null, "source": "pediatra", "notes": "Fictício", "createdBy": "user-admin", "createdAt": "2026-07-01T10:00:00Z" }
-  ],
-  "dailyInstructions": [
-    { "id": "inst-demo-today", "date": "2026-07-09", "title": "Dia com rotina leve", "description": "Dados fictícios para demonstrar o plano diário. Ajuste cada item conforme a orientação dos responsáveis.", "createdBy": "user-admin", "createdAt": "2026-07-09T07:00:00Z", "updatedAt": "2026-07-09T07:00:00Z", "status": "active", "notes": "" }
-  ],
-  "dailyTasks": [
-    { "id": "task-demo-1", "instructionId": "inst-demo-today", "date": "2026-07-09", "title": "Lanche da manhã", "category": "alimentação", "scheduledTime": "09:30", "description": "Registrar se houve recusa ou alteração.", "priority": "normal", "requiresPhoto": true, "status": "pending", "completedBy": null, "completedAt": null, "comments": [], "createdBy": "user-admin", "createdAt": "2026-07-09T07:00:00Z" },
-    { "id": "task-demo-2", "instructionId": "inst-demo-today", "date": "2026-07-09", "title": "Descanso após o almoço", "category": "sono", "scheduledTime": "13:00", "description": "Registrar início e fim do sono.", "priority": "important", "requiresPhoto": false, "status": "pending", "completedBy": null, "completedAt": null, "comments": [], "createdBy": "user-admin", "createdAt": "2026-07-09T07:00:00Z" },
-    { "id": "task-demo-3", "instructionId": "inst-demo-today", "date": "2026-07-09", "title": "Atividade tranquila", "category": "atividade", "scheduledTime": "16:00", "description": "Adicionar foto se for um momento especial.", "priority": "normal", "requiresPhoto": true, "status": "completed", "completedBy": "user-caregiver", "completedAt": "2026-07-09T16:20:00Z", "comments": [{ "userId": "user-caregiver", "comment": "Atividade registrada como exemplo.", "createdAt": "2026-07-09T16:20:00Z" }], "createdBy": "user-admin", "createdAt": "2026-07-09T07:00:00Z" },
-    { "id": "task-demo-4", "instructionId": "inst-demo-today", "date": "2026-07-09", "title": "Medicamento conforme prescrição", "category": "medicamento", "scheduledTime": "18:00", "description": "Somente administrar com orientação médica vigente.", "priority": "required", "requiresPhoto": false, "status": "pending", "completedBy": null, "completedAt": null, "comments": [], "createdBy": "user-admin", "createdAt": "2026-07-09T07:00:00Z" }
-  ],
-  "dailyPhotos": [],
-  "dailyConfirmations": [],
-  "dailyComments": [],
-  "dailyLogs": [
-    { "id": "log-demo-1", "date": "2026-07-09", "time": "08:10", "type": "observação", "description": "Exemplo de registro visível no feed do dia.", "mood": "bem", "symptoms": "", "fileUrl": null, "isImportant": false, "createdBy": "user-caregiver", "createdAt": "2026-07-09T08:10:00Z" }
-  ],
-  "medications": [
-    { "id": "med-demo-1", "name": "Medicamento de exemplo", "dosage": "Conforme prescrição", "schedule": "18:00", "frequency": "Diário", "startDate": "2026-07-01", "endDate": "2026-07-15", "prescribedBy": "Profissional Exemplo", "appointmentId": "apt-demo-1", "status": "active", "notes": "Não use esta demonstração como orientação médica.", "createdBy": "user-admin", "createdAt": "2026-07-01T10:00:00Z" }
-  ],
-  "medicationAdministrations": [],
-  "emergencyContacts": [
-    { "id": "contact-demo-1", "name": "Responsável 1", "relationship": "Responsável", "phone": "+55 11 00000-0001", "whatsapp": "+55 11 00000-0001", "priority": 1, "notes": "Contato fictício" },
-    { "id": "contact-demo-2", "name": "Responsável 2", "relationship": "Responsável", "phone": "+55 11 00000-0002", "whatsapp": "+55 11 00000-0002", "priority": 2, "notes": "Contato fictício" }
-  ],
-  "doctors": [
-    { "id": "doctor-demo-1", "name": "Profissional Exemplo", "specialty": "Pediatria", "clinic": "Clínica demonstrativa", "phone": "+55 11 00000-0010", "address": "", "notes": "" }
-  ],
-  "attachments": [],
-  "auditLog": [
-    { "id": "audit-demo-1", "userId": "user-admin", "action": "seeded", "entityType": "demo", "entityId": "child-maria-elis", "oldValue": null, "newValue": "Dados fictícios carregados", "createdAt": "2026-07-09T07:00:00Z" }
-  ],
-  "settings": [
-    { "id": "setting-theme", "key": "theme", "value": "system", "updatedAt": "2026-07-09T07:00:00Z" }
-  ]
+    "childProfile":  {
+                         "id":  "child-maria-elis",
+                         "name":  "Maria Elis",
+                         "birthDate":  "",
+                         "photoUrl":  "assets/icons/child-avatar.svg",
+                         "healthPlan":  "",
+                         "bloodType":  "",
+                         "allergies":  [
+
+                                       ],
+                         "criticalNotes":  "",
+                         "address":  ""
+                     },
+    "users":  [
+
+              ],
+    "roles":  [
+                  {
+                      "id":  "admin",
+                      "name":  "Admin",
+                      "permissions":  [
+                                          "*"
+                                      ]
+                  },
+                  {
+                      "id":  "guardian",
+                      "name":  "Responsável",
+                      "permissions":  [
+                                          "dashboard:view",
+                                          "instructions:*",
+                                          "tasks:*",
+                                          "logs:*",
+                                          "documents:*",
+                                          "vaccines:*",
+                                          "appointments:*",
+                                          "growth:*",
+                                          "medications:*",
+                                          "emergency:view",
+                                          "reports:export",
+                                          "photos:attach"
+                                      ]
+                  },
+                  {
+                      "id":  "caregiver",
+                      "name":  "Cuidador",
+                      "permissions":  [
+                                          "dashboard:view",
+                                          "instructions:view",
+                                          "instructions:confirm",
+                                          "tasks:view",
+                                          "tasks:complete",
+                                          "logs:create",
+                                          "photos:attach",
+                                          "emergency:view"
+                                      ]
+                  },
+                  {
+                      "id":  "visitor",
+                      "name":  "Visitante",
+                      "permissions":  [
+                                          "dashboard:view",
+                                          "instructions:view",
+                                          "emergency:view"
+                                      ]
+                  }
+              ],
+    "documents":  [
+
+                  ],
+    "vaccines":  [
+
+                 ],
+    "appointments":  [
+
+                     ],
+    "growthRecords":  [
+
+                      ],
+    "dailyInstructions":  [
+
+                          ],
+    "dailyTasks":  [
+
+                   ],
+    "dailyPhotos":  [
+
+                    ],
+    "dailyConfirmations":  [
+
+                           ],
+    "dailyComments":  [
+
+                      ],
+    "dailyLogs":  [
+
+                  ],
+    "medications":  [
+
+                    ],
+    "medicationAdministrations":  [
+
+                                  ],
+    "emergencyContacts":  [
+
+                          ],
+    "doctors":  [
+
+                ],
+    "attachments":  [
+
+                    ],
+    "auditLog":  [
+
+                 ],
+    "settings":  [
+
+                 ],
+    "migrations":  [
+
+                   ],
+    "meta":  {
+
+             }
 }
