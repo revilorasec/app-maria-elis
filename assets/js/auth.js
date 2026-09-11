@@ -1,29 +1,20 @@
 const CONFIG_KEY = 'maria-onedrive-config';
 export const GRAPH_SCOPES = ['User.Read', 'Files.ReadWrite'];
+const DEFAULT_ONEDRIVE_CONFIG = Object.freeze({
+  clientId: '6b8bb756-f14c-493c-bc55-6966f75a18c4',
+  tenantId: '911e1aee-070e-421b-ae71-439f01c2263e',
+  folderName: '(APP MARIA ELIS)'
+});
 
 let client = null;
 let activeAccount = null;
 
 export function loadOneDriveConfig() {
-  try { return JSON.parse(localStorage.getItem(CONFIG_KEY) || 'null'); }
-  catch { return null; }
-}
-
-export function saveOneDriveConfig({ clientId, tenantId, folderName }) {
-  const config = {
-    clientId: String(clientId || '').trim(),
-    tenantId: String(tenantId || 'organizations').trim() || 'organizations',
-    folderName: String(folderName || '(APP MARIA ELIS)').trim() || '(APP MARIA ELIS)'
-  };
-  if (!config.clientId) throw new Error('Informe o ID do aplicativo cliente.');
-  localStorage.setItem(CONFIG_KEY, JSON.stringify(config));
-  return config;
-}
-
-export function clearOneDriveConfig() {
-  localStorage.removeItem(CONFIG_KEY);
-  client = null;
-  activeAccount = null;
+  // Os identificadores sao publicos e pertencem exclusivamente a este app.
+  // A copia local apenas migra aparelhos que usavam a antiga tela tecnica.
+  try { localStorage.setItem(CONFIG_KEY, JSON.stringify(DEFAULT_ONEDRIVE_CONFIG)); }
+  catch { /* O login continua funcionando sem armazenamento local. */ }
+  return { ...DEFAULT_ONEDRIVE_CONFIG };
 }
 
 export async function initializeMicrosoftSession() {
@@ -35,7 +26,8 @@ export async function initializeMicrosoftSession() {
     auth: {
       clientId: config.clientId,
       authority: `https://login.microsoftonline.com/${config.tenantId}`,
-      redirectUri: `${window.location.origin}${window.location.pathname}`
+      redirectUri: `${window.location.origin}${window.location.pathname}`,
+      postLogoutRedirectUri: `${window.location.origin}${window.location.pathname}`
     },
     cache: { cacheLocation: 'localStorage' }
   });
@@ -49,7 +41,7 @@ export async function initializeMicrosoftSession() {
 
 export async function signInMicrosoft() {
   if (!client) await initializeMicrosoftSession();
-  if (!client) throw new Error('Salve a configuração antes de entrar.');
+  if (!client) throw new Error('Não foi possível iniciar a conexão com a Microsoft.');
   await client.loginRedirect({ scopes: GRAPH_SCOPES });
 }
 

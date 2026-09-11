@@ -63,8 +63,8 @@ Se o portal informar que é necessária aprovação, peça ao administrador do M
 ## Parte 6 — configurar e testar o app
 
 1. Abra a URL do GitHub Pages no celular ou computador.
-2. Na configuração inicial, cole o **Client ID**, o **Tenant ID** e informe `(APP MARIA ELIS)`.
-3. Clique em **Salvar e entrar com Microsoft**.
+2. Toque em **Entrar com a Microsoft**. O aplicativo já possui internamente os identificadores públicos e a pasta `(APP MARIA ELIS)`.
+3. Autorize o acesso solicitado pela Microsoft, se for a primeira conexão neste aparelho.
 4. Entre com a conta que possui (ou recebeu o atalho de) `(APP MARIA ELIS)`.
 5. Verifique no OneDrive se foram criados `dados.json`, `Backup/`, `Fotos/`, `Anexos/` e `Config/`.
 6. Faça um registro e uma foto de teste. Confira se a foto aparece em `Fotos/AAAA/MM/`.

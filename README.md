@@ -54,7 +54,7 @@ A URI de redirecionamento precisa corresponder exatamente à URL que aparece no 
 ## Preparar o OneDrive e os usuários
 
 1. Entre no OneDrive da conta proprietária e crie `(APP MARIA ELIS)`.
-2. Abra o app, salve a configuração e entre com essa conta. Dentro da pasta principal existente, ele criará `dados.json`, `Backup`, `Fotos`, `Anexos` e `Config`.
+2. Abra o app e toque em **Entrar com a Microsoft**. Os identificadores públicos e o nome da pasta já fazem parte do aplicativo. Dentro da pasta principal existente, ele criará `dados.json`, `Backup`, `Fotos`, `Anexos` e `Config`.
 3. Para usar contas diferentes (por exemplo, responsáveis e babá), compartilhe essa pasta apenas com as contas autorizadas, com a permissão apropriada.
 4. Cada pessoa convidada deve adicionar um **atalho da pasta compartilhada em Meus arquivos** antes de abrir o app; assim a mesma pasta aparece na raiz do OneDrive dela. Sem esse atalho, o app informa que a pasta não foi encontrada e não cria outra pasta silenciosamente.
 5. Depois do primeiro acesso, use **Mais > Pessoas** e **Usuários e permissões** para cadastrar nome, e-mail e papel (`guardian`, `caregiver`, `grandparent`, `visitor` ou `custom`). Não edite `dados.json` manualmente.

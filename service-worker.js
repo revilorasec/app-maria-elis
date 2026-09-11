@@ -1,7 +1,7 @@
-const CACHE_NAME = 'maria-onedrive-shell-v17';
+const CACHE_NAME = 'maria-onedrive-shell-v18';
 const APP_SHELL = [
-  './', './index.html', './manifest.json', './assets/css/styles.css?v=16', './assets/js/app.js?v=17', './assets/js/appointmentEnhancements.js?v=17',
-  './assets/js/auth.js?v=16', './assets/js/graph.js?v=16', './assets/js/storage.js?v=16', './assets/js/photos.js?v=16', './assets/js/ui.js?v=16', './assets/js/migration.js?v=16', './assets/js/schemaMigration.js?v=16', './assets/js/adminStorage.js?v=16',
+  './', './index.html', './manifest.json', './assets/css/styles.css?v=16', './assets/js/app.js?v=18', './assets/js/appointmentEnhancements.js?v=17',
+  './assets/js/auth.js?v=18', './assets/js/graph.js?v=16', './assets/js/storage.js?v=16', './assets/js/photos.js?v=16', './assets/js/ui.js?v=16', './assets/js/migration.js?v=16', './assets/js/schemaMigration.js?v=16', './assets/js/adminStorage.js?v=16',
   './assets/js/services/dataService.js?v=16', './assets/js/services/permissionsService.js?v=16', './assets/js/services/deviceAccessService.js?v=16', './assets/js/services/notificationService.js?v=16',
   './assets/js/services/chartService.js?v=16', './assets/js/services/reportService.js?v=16',
   './assets/icons/app-icon.svg', './assets/icons/child-avatar.svg', './data/data.sample.json'

@@ -4,7 +4,7 @@ import { clearDeviceBinding, clearFailedAttempts, createPinHash, getDeviceBindin
 import { notify, offlineNotice } from './services/notificationService.js?v=16';
 import { lineChart, donutChart } from './services/chartService.js?v=16';
 import { exportBackup, printDailyReport } from './services/reportService.js?v=16';
-import { clearOneDriveConfig, initializeMicrosoftSession, saveOneDriveConfig, signInMicrosoft, signOutMicrosoft } from './auth.js?v=16';
+import { initializeMicrosoftSession, signInMicrosoft, signOutMicrosoft } from './auth.js?v=18';
 import { backupDB, connectOneDrive, deleteFile, downloadFile, getDBVersion, getFileUrl, getRootWebUrl, getStorageIdentity, listFiles, loadDB, readJsonFile, restoreDB, saveDB, uploadFile, writeJsonFile } from './storage.js?v=16';
 import { eventPhotoPath, listPendingPhotos, queuePendingPhoto, removePendingPhoto, resizeImage } from './photos.js?v=16';
 import { renderConnectionStatus } from './ui.js?v=16';
@@ -111,7 +111,7 @@ async function init() {
     }
     render();
   } catch (error) {
-    app.innerHTML = '<main class="fatal"><h1>Não foi possível conectar</h1><p>' + escape(error.message) + '</p><button class="button" data-action="reconfigure-onedrive">Revisar configuração</button></main>';
+    app.innerHTML = '<main class="fatal"><p class="eyebrow">Conexão interrompida</p><h1>Não foi possível conectar</h1><p>' + escape(error.message) + '</p><button class="button button--wide" data-action="reload">Tentar novamente</button><button class="text-button" data-action="change-microsoft-account">Trocar conta Microsoft</button></main>';
   }
 }
 
@@ -381,22 +381,22 @@ function canOpenPage(page) {
 }
 function assertDeviceAction(action) {
   if (!isRestrictedDeviceMode()) return;
-  const forbidden = new Set(['microsoft-login','sign-out-microsoft','reconfigure-onedrive','sync-now','open-onedrive','setup-admin-area','open-admin-file','restore-backup','clear-example-data','clear-example-vaccines','add-person','open-person','edit-person','filter-people','toggle-person-active','delete-person','open-caregiver-step','person-documents','manage-person-access','edit-user-access','revoke-user-access','restore-trash','add-growth','edit-growth','delete-growth','print-report','export-backup','export-pending-conflict','discard-pending-conflict','revoke-device']);
+  const forbidden = new Set(['microsoft-login','sign-out-microsoft','change-microsoft-account','sync-now','open-onedrive','setup-admin-area','open-admin-file','restore-backup','clear-example-data','clear-example-vaccines','add-person','open-person','edit-person','filter-people','toggle-person-active','delete-person','open-caregiver-step','person-documents','manage-person-access','edit-user-access','revoke-user-access','restore-trash','add-growth','edit-growth','delete-growth','print-report','export-backup','export-pending-conflict','discard-pending-conflict','revoke-device']);
   if (forbidden.has(action)) throw new Error('Esta ação não está disponível no Modo Babá.');
   const required = { 'open-task': 'tasks:view', 'toggle-checklist': 'tasks:complete', 'complete-task': 'tasks:complete', 'open-photo': 'photos:attach', 'open-document': 'documents:view', 'open-vaccine': 'vaccines:view', 'open-vaccine-proof': 'vaccines:view', 'edit-vaccine': 'vaccines:edit', 'delete-vaccine': 'vaccines:delete' };
   if (required[action] && !canCurrent(required[action])) throw new Error('Seu perfil não tem permissão para esta ação.');
 }
 function assertDeviceForm(formId) {
   if (!isRestrictedDeviceMode()) return;
-  if (new Set(['onedrive-setup-form','task-form','attachment-form','child-profile-form','person-form','caregiver-form','access-form','growth-form','user-form','migration-form','vaccine-form','vaccine-bulk-photo-form']).has(formId)) throw new Error('Este formulário não está disponível no Modo Babá.');
+  if (new Set(['task-form','attachment-form','child-profile-form','person-form','caregiver-form','access-form','growth-form','user-form','migration-form','vaccine-form','vaccine-bulk-photo-form']).has(formId)) throw new Error('Este formulário não está disponível no Modo Babá.');
 }
 
 function renderSetup() {
-  app.innerHTML = `<main class="fatal"><p class="eyebrow">Configuração inicial</p><h1>Conectar ao OneDrive</h1><p>Informe apenas os identificadores públicos do aplicativo Microsoft. Eles ficam neste navegador; senha e client secret não são usados.</p><form id="onedrive-setup-form" class="form-card"><label>ID do aplicativo cliente<input name="clientId" required autocomplete="off" placeholder="00000000-0000-0000-0000-000000000000"></label><label>ID do diretório/locatário<input name="tenantId" value="organizations" required autocomplete="off"></label><label>Pasta no OneDrive<input name="folderName" value="(APP MARIA ELIS)" required></label><button class="button button--wide" type="submit">Salvar e entrar com Microsoft</button></form></main>`;
+  app.innerHTML = `<main class="fatal"><p class="eyebrow">Conectar armazenamento</p><h1>Conectar ao OneDrive</h1><p>Entre com sua conta Microsoft para permitir que o aplicativo salve fotos e documentos da Maria no OneDrive.</p><button class="button button--wide" data-action="microsoft-login">Entrar com a Microsoft</button></main>`;
 }
 
 function renderLogin() {
-  app.innerHTML = `<main class="fatal"><p class="eyebrow">Área privada</p><h1>Entrar com Microsoft</h1><p>Ao entrar, o app usa a pasta <strong>${escape(oneDriveConfig.folderName)}</strong> no OneDrive da conta autorizada.</p><button class="button button--wide" data-action="microsoft-login">Entrar com Microsoft</button><button class="text-button" data-action="reconfigure-onedrive">Alterar configuração</button></main>`;
+  app.innerHTML = `<main class="fatal"><p class="eyebrow">Conectar armazenamento</p><h1>Conectar ao OneDrive</h1><p>Entre com a conta Microsoft autorizada para acessar os arquivos da Maria.</p><button class="button button--wide" data-action="microsoft-login">Entrar com a Microsoft</button></main>`;
 }
 
 async function tryLoadAdminArea(create = false) {
@@ -826,7 +826,7 @@ ${renderAdminSettingsCard()}${renderDeviceAdminCard()}
     ${(user.role || user.roleId) === 'admin' ? '<section class="settings-card"><div class="setting-line"><div><strong>Backup</strong><p>Backup diário no OneDrive.</p></div><button class="button button--secondary button--small" data-action="restore-backup">Restaurar</button></div></section>' : ''}
     <section class="settings-card"><div class="setting-line"><div><strong>Pasta privada</strong><p>${escape(oneDriveConfig.folderName)}</p></div><button class="button button--secondary button--small" data-action="open-onedrive">Abrir</button></div></section>
     ${(user.role || user.roleId) === 'admin' ? '<section class="settings-card"><div class="setting-line"><div><strong>Dados de exemplo</strong><p>Verifique e remova qualquer registro fictício remanescente.</p></div><button class="button button--secondary button--small" data-action="clear-example-data">Verificar</button></div></section>' : ''}
-    <section class="settings-card"><div class="setting-line"><div><strong>Conta Microsoft</strong><p>Sair somente deste navegador.</p></div><button class="button button--danger button--small" data-action="sign-out-microsoft">Sair</button></div></section>`;
+    <section class="settings-card"><div class="setting-line"><div><strong>Conta Microsoft</strong><p>${escape(microsoftAccount?.username || 'Conta conectada')}</p></div><button class="button button--secondary button--small" data-action="change-microsoft-account">Trocar conta</button></div></section>`;
 }
 function renderNavigation() {
   const tabs = [];
@@ -1089,14 +1089,14 @@ document.addEventListener('click', async (event) => {
         await signOutMicrosoft();
         break;
       }
-      case 'reconfigure-onedrive': {
+      case 'change-microsoft-account': {
         const pendingPhotos = dataNamespace ? await listPendingPhotos(dataNamespace) : [];
         if (hasPendingChanges() || pendingPhotos.length) {
           if (data) exportBackup(data);
-          notify('A conexão não foi alterada porque há dados pendentes. Uma cópia local foi baixada; sincronize antes de trocar a pasta.', 'warning');
+          notify('A conta não foi alterada porque há dados pendentes. Uma cópia local foi baixada; sincronize antes de trocar de conta.', 'warning');
           break;
         }
-        if (window.confirm('Alterar a conexão neste aparelho? Os dados no OneDrive não serão apagados.')) { clearOneDriveConfig(); resetLocalCache(); window.location.reload(); }
+        if (window.confirm('Trocar a conta Microsoft neste aparelho? Os dados no OneDrive não serão apagados.')) await signOutMicrosoft();
         break;
       }
       case 'sync-now': await syncNow(); notify('Sincronização concluída.'); break;
@@ -1150,7 +1150,6 @@ document.addEventListener('submit', async (event) => {
     if (event.target.id === 'device-unlock-form') { await unlockDevice(event.target); return; }
     if (event.target.id === 'admin-unlock-form') { await unlockAdministrator(event.target); return; }
     assertDeviceForm(event.target.id);
-    if (event.target.id === 'onedrive-setup-form') { const formData = new FormData(event.target); saveOneDriveConfig({ clientId: formData.get('clientId'), tenantId: formData.get('tenantId'), folderName: formData.get('folderName') }); window.location.reload(); return; }
     if (event.target.id === 'task-form') await saveTask(event.target);
     if (event.target.id === 'quick-form') await saveQuickRecord(event.target);
     if (event.target.id === 'task-note-form') saveTaskNote(event.target);
@@ -1924,6 +1923,5 @@ function bindConnectivity() {
   window.addEventListener('offline', update);
 }
 function registerServiceWorker() {
-  if ('serviceWorker' in navigator) navigator.serviceWorker.register('./service-worker.js?v=16').catch(() => {});
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('./service-worker.js?v=18').catch(() => {});
 }
-
