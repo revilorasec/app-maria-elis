@@ -1,9 +1,10 @@
-const CACHE_NAME = 'maria-onedrive-shell-v18';
+const CACHE_NAME = 'maria-onedrive-shell-v35';
 const APP_SHELL = [
-  './', './index.html', './manifest.json', './assets/css/styles.css?v=16', './assets/js/app.js?v=18', './assets/js/appointmentEnhancements.js?v=17',
-  './assets/js/auth.js?v=18', './assets/js/graph.js?v=16', './assets/js/storage.js?v=16', './assets/js/photos.js?v=16', './assets/js/ui.js?v=16', './assets/js/migration.js?v=16', './assets/js/schemaMigration.js?v=16', './assets/js/adminStorage.js?v=16',
-  './assets/js/services/dataService.js?v=16', './assets/js/services/permissionsService.js?v=16', './assets/js/services/deviceAccessService.js?v=16', './assets/js/services/notificationService.js?v=16',
-  './assets/js/services/chartService.js?v=16', './assets/js/services/reportService.js?v=16',
+  './', './index.html', './manifest.json', './assets/css/styles.css?v=29', './assets/js/bootstrap.js?v=19',
+  './assets/js/auth.js?v=19', './assets/js/graph.js?v=19', './assets/js/storage.js?v=19', './assets/js/photos.js?v=19', './assets/js/ui.js?v=19', './assets/js/migration.js?v=19', './assets/js/schemaMigration.js?v=19', './assets/js/adminStorage.js?v=19',
+  './assets/js/services/dataService.js?v=19', './assets/js/services/permissionsService.js?v=19', './assets/js/services/deviceAccessService.js?v=19', './assets/js/services/notificationService.js?v=19',
+  './assets/js/services/chartService.js?v=19', './assets/js/services/reportService.js?v=19',
+  './assets/js/next/app-next.js?v=19', './assets/js/next/supabase.js?v=19', './assets/js/next/config.js?v=19', './assets/js/next/permissions.js?v=19', './assets/js/next/file-picker.js?v=19', './assets/js/next/photo-editor.js?v=19', './assets/js/next/care-service.js?v=19', './assets/js/next/routine-service.js?v=19', './assets/js/next/ics.js?v=19', './assets/js/next/migration-preview.js?v=19', './assets/js/next/identity-client.js?v=19', './assets/js/next/document-service.js?v=19',
   './assets/icons/app-icon.svg', './assets/icons/child-avatar.svg', './data/data.sample.json'
 ];
 
@@ -17,36 +18,19 @@ self.addEventListener('activate', (event) => {
 
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
-
   const requestUrl = new URL(event.request.url);
-  const sameOrigin = requestUrl.origin === self.location.origin;
-  if (!sameOrigin) return;
-
+  if (requestUrl.origin !== self.location.origin) return;
   const acceptsHtml = event.request.headers.get('accept')?.includes('text/html');
   const isHtmlNavigation = event.request.mode === 'navigate' && acceptsHtml;
-
   if (isHtmlNavigation) {
-    event.respondWith(
-      fetch(event.request)
-        .then((response) => {
-          if (response.ok) {
-            const copy = response.clone();
-            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
-          }
-          return response;
-        })
-        .catch(async () => (await caches.match(event.request)) || caches.match('./index.html'))
-    );
+    event.respondWith(fetch(event.request).then((response) => {
+      if (response.ok) caches.open(CACHE_NAME).then((cache) => cache.put(event.request, response.clone()));
+      return response;
+    }).catch(async () => (await caches.match(event.request)) || caches.match('./index.html')));
     return;
   }
-
-  event.respondWith(
-    caches.match(event.request).then((cached) => cached || fetch(event.request).then((response) => {
-      if (response.ok) {
-        const copy = response.clone();
-        caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
-      }
-      return response;
-    }))
-  );
+  event.respondWith(caches.match(event.request).then((cached) => cached || fetch(event.request).then((response) => {
+    if (response.ok) caches.open(CACHE_NAME).then((cache) => cache.put(event.request, response.clone()));
+    return response;
+  })));
 });

@@ -1,8 +1,16 @@
-# App Maria Elis — PWA com OneDrive
+# App Maria Elis — PWA familiar
 
-Este é um aplicativo HTML5/PWA estático, responsivo e sem backend próprio. Ele usa login Microsoft (MSAL) e Microsoft Graph para guardar os dados privados diretamente em uma pasta do OneDrive.
+## Acesso atual
 
-Não usa Azure Functions, Blob Storage, banco externo, Key Vault, API própria, servidor de aplicação ou assinatura Azure para banco/backend.
+O acesso padrão usa **e-mail + PIN individual** pelo Supabase Auth. No primeiro acesso, a pessoa informa os dois campos; depois, o aparelho lembra o e-mail e solicita somente o PIN. O administrador cria, altera, bloqueia e redefine o PIN dos usuários dentro do próprio aplicativo.
+
+O Supabase/PostgreSQL guarda os dados estruturados com RLS e permissões por família e papel. Fotos e documentos continuam no ecossistema Microsoft, mas são acessados por uma Edge Function protegida: usuários comuns não entram na Microsoft, não configuram OneDrive e não recebem tokens do Microsoft Graph.
+
+O modo antigo com login Microsoft foi mantido temporariamente apenas para contingência e consulta aos dados anteriores, usando `?mode=legacy` no fim da URL.
+
+## Modo legado com OneDrive
+
+O texto abaixo documenta o fluxo antigo. Ele não é mais a entrada padrão do aplicativo.
 
 ## Onde os dados ficam
 

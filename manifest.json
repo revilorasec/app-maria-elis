@@ -1,14 +1,20 @@
 {
   "name": "App Maria Elis",
   "short_name": "Maria Elis",
-  "description": "PWA privado para rotina, saúde e orientações, com dados no OneDrive.",
+  "description": "PWA privado para rotina, agenda, saúde e cuidados da Maria Elis.",
   "lang": "pt-BR",
-  "start_url": "./",
+  "start_url": "./?mode=next",
   "scope": "./",
   "display": "standalone",
   "background_color": "#f6faf7",
   "theme_color": "#2f6f66",
   "icons": [
-    { "src": "assets/icons/app-icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
-  ]
+    {
+      "src": "assets/icons/app-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "id": "./?mode=next"
 }

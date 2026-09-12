@@ -4,11 +4,11 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <meta name="theme-color" content="#2f6f66">
-    <meta name="description" content="PWA privado para organizar rotina, saúde e orientações da criança no OneDrive.">
+    <meta name="description" content="PWA privado para organizar rotina, agenda, saúde e cuidados da Maria Elis.">
     <link rel="manifest" href="manifest.json">
     <link rel="icon" href="assets/icons/app-icon.svg" type="image/svg+xml">
     <link rel="apple-touch-icon" href="assets/icons/app-icon.svg">
-    <link rel="stylesheet" href="assets/css/styles.css?v=16">
+    <link rel="stylesheet" href="assets/css/styles.css?v=29">
     <title>App Maria Elis</title>
   </head>
   <body>
@@ -26,8 +26,7 @@
         window.addEventListener('error', function (event) { showStartupError(event.message); });
         window.addEventListener('unhandledrejection', function (event) { showStartupError(event.reason && event.reason.message); });
       }());
-    </script>    <script src="https://cdn.jsdelivr.net/npm/@azure/msal-browser@2.38.4/lib/msal-browser.min.js" crossorigin="anonymous"></script>
-    <script type="module" src="assets/js/app.js?v=18"></script>
-    <script type="module" src="assets/js/appointmentEnhancements.js?v=17"></script>
+    </script>
+    <script type="module" src="assets/js/bootstrap.js?v=19"></script>
   </body>
 </html>
