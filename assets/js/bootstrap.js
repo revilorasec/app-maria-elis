@@ -4,7 +4,7 @@ const next = params.get('mode') !== 'legacy';
 async function start() {
   if (next) {
     await import('./next/app-next.js?v=20');
-    await import('./next/medical-appointments-v23.js?v=23');
+    await import('./next/medical-appointments-quick-v26.js?v=26');
     await import('./next/pwa-install-v24.js?v=24');
   } else {
     await new Promise((resolve, reject) => {
