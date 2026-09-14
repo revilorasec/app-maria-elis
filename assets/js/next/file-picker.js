@@ -1,5 +1,5 @@
-import { FILE_GATEWAY_URL, SUPABASE_PUBLISHABLE_KEY } from './config.js?v=19';
-import { supabase, currentSession } from './supabase.js?v=19';
+import { FILE_GATEWAY_URL, SUPABASE_PUBLISHABLE_KEY } from './config.js?v=20';
+import { supabase, currentSession } from './supabase.js?v=20';
 
 export function renderFilePicker({ id = 'file', label = 'Arquivo', accept = 'image/*,application/pdf,video/*', avatar = false } = {}) {
   return `<label class="attachment-button">${label}<input id="${id}" type="file" accept="${accept}" ${avatar ? 'capture="environment"' : ''}></label><div id="${id}-preview" class="file-preview" hidden></div>`;
