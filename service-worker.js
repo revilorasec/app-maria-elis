@@ -1,10 +1,10 @@
-const CACHE_NAME = 'maria-onedrive-shell-v38';
+const CACHE_NAME = 'maria-onedrive-shell-v39';
 const APP_SHELL = [
-  './', './index.html', './manifest.json', './assets/css/styles.css?v=30', './assets/js/bootstrap.js?v=23',
+  './', './index.html', './manifest.json?v=24', './assets/css/styles.css?v=30', './assets/js/bootstrap.js?v=24',
   './assets/js/auth.js?v=19', './assets/js/graph.js?v=19', './assets/js/storage.js?v=19', './assets/js/photos.js?v=19', './assets/js/ui.js?v=19', './assets/js/migration.js?v=19', './assets/js/schemaMigration.js?v=19', './assets/js/adminStorage.js?v=19',
   './assets/js/services/dataService.js?v=19', './assets/js/services/permissionsService.js?v=19', './assets/js/services/deviceAccessService.js?v=19', './assets/js/services/notificationService.js?v=19',
   './assets/js/services/chartService.js?v=19', './assets/js/services/reportService.js?v=19',
-  './assets/js/next/app-next.js?v=20', './assets/js/next/medical-appointments-v23.js?v=23', './assets/js/next/pwa-install-v23.js?v=23', './assets/js/next/supabase.js?v=20', './assets/js/next/config.js?v=20', './assets/js/next/permissions.js?v=20', './assets/js/next/file-picker.js?v=20', './assets/js/next/photo-editor.js?v=20', './assets/js/next/care-service.js?v=20', './assets/js/next/routine-service.js?v=20', './assets/js/next/ics.js?v=20', './assets/js/next/migration-preview.js?v=20', './assets/js/next/identity-client.js?v=20', './assets/js/next/document-service.js?v=20', './assets/js/next/recipe-service.js?v=20',
+  './assets/js/next/app-next.js?v=20', './assets/js/next/medical-appointments-v23.js?v=23', './assets/js/next/pwa-install-v24.js?v=24', './assets/js/next/supabase.js?v=20', './assets/js/next/config.js?v=20', './assets/js/next/permissions.js?v=20', './assets/js/next/file-picker.js?v=20', './assets/js/next/photo-editor.js?v=20', './assets/js/next/care-service.js?v=20', './assets/js/next/routine-service.js?v=20', './assets/js/next/ics.js?v=20', './assets/js/next/migration-preview.js?v=20', './assets/js/next/identity-client.js?v=20', './assets/js/next/document-service.js?v=20', './assets/js/next/recipe-service.js?v=20',
   './assets/icons/app-icon.svg', './assets/icons/child-avatar.svg', './data/data.sample.json'
 ];
 
