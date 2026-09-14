@@ -57,11 +57,12 @@ function formatDate(value) {
 }
 
 function card(row) {
+  const details = [row.doctor_name, row.clinic_or_hospital].filter(Boolean).join(' · ');
   return `<article class="medical-quick-card">
     <div>
       <small>${esc(formatDate(row.appointment_at))}</small>
       <h3>${esc(row.specialty || 'Consulta')}</h3>
-      <p>${esc(row.doctor_name || '')}${row.clinic_or_hospital ? ` · ${esc(row.clinic_or_hospital)}` : ''}</p>
+      ${details ? `<p>${esc(details)}</p>` : ''}
     </div>
     <button type="button" class="button button--secondary button--small" data-medical-quick-edit="${esc(row.id)}">Editar</button>
   </article>`;
@@ -100,9 +101,9 @@ function openEditor(id = '') {
     </header>
     <form id="medical-quick-form" class="medical-quick-form">
       <input type="hidden" name="id" value="${esc(row?.id || '')}">
-      <label>Especialidade<input name="specialty" required autocomplete="off" value="${esc(row?.specialty || '')}" placeholder="Ex.: Pediatria"></label>
-      <label>Nome do médico<input name="doctor_name" required autocomplete="off" value="${esc(row?.doctor_name || '')}" placeholder="Ex.: Dra. Talita Oliveira"></label>
-      <label>Local<input name="location" required autocomplete="off" value="${esc(row?.clinic_or_hospital || '')}" placeholder="Ex.: Clínica / Hospital"></label>
+      <label>Especialidade <span class="medical-quick-required">obrigatório</span><input name="specialty" required autocomplete="off" value="${esc(row?.specialty || '')}" placeholder="Ex.: Pediatria"></label>
+      <label>Nome do médico <span class="medical-quick-optional">opcional</span><input name="doctor_name" autocomplete="off" value="${esc(row?.doctor_name || '')}" placeholder="Ex.: Dra. Talita Oliveira"></label>
+      <label>Local <span class="medical-quick-optional">opcional</span><input name="location" autocomplete="off" value="${esc(row?.clinic_or_hospital || '')}" placeholder="Ex.: Clínica / Hospital"></label>
       <div class="medical-quick-footer">
         <button type="button" class="button button--secondary" data-medical-quick-back>Voltar</button>
         <button type="submit" class="button" data-medical-quick-save>Salvar</button>
@@ -126,7 +127,7 @@ async function save(form) {
     const specialty = String(data.get('specialty') || '').trim();
     const doctor = String(data.get('doctor_name') || '').trim();
     const location = String(data.get('location') || '').trim();
-    if (!specialty || !doctor || !location) throw new Error('Preencha especialidade, nome do médico e local.');
+    if (!specialty) throw new Error('Informe pelo menos a especialidade.');
 
     const result = await supabase.rpc('save_medical_appointment_quick', {
       p_id: id || null,
@@ -143,7 +144,7 @@ async function save(form) {
     const raw = String(error?.message || 'Não foi possível salvar.');
     const message = raw.includes('permission_denied') ? 'Seu acesso não permite editar consultas.'
       : raw.includes('not_authenticated') ? 'Sua sessão expirou. Entre novamente no app.'
-      : raw.includes('specialty_required') || raw.includes('doctor_required') || raw.includes('location_required') ? 'Preencha os três campos.'
+      : raw.includes('specialty_required') ? 'Informe pelo menos a especialidade.'
       : raw;
     toast(`Erro ao salvar: ${message}`, true);
     if (button) { button.disabled = false; button.textContent = 'Salvar'; }
@@ -201,7 +202,7 @@ style.textContent = `
 .medical-quick-feature{appearance:none;border:1px solid var(--border,rgba(58,87,82,.18));background:var(--surface,#fff);border-radius:18px;padding:1rem;text-align:left;display:flex;align-items:center;gap:.8rem;min-height:92px;color:inherit;font:inherit;cursor:pointer;width:100%;box-shadow:0 8px 24px rgba(41,62,58,.06)}
 .medical-quick-feature>span{width:42px;height:42px;border-radius:14px;display:grid;place-items:center;background:rgba(47,111,102,.12);font-size:1.25rem;color:#2f6f66}.medical-quick-feature strong,.medical-quick-feature small{display:block}.medical-quick-feature small{margin-top:.28rem;opacity:.72}
 .medical-quick-overlay{position:fixed;inset:0;z-index:10000;background:rgba(17,28,26,.6);display:flex;align-items:flex-end;justify-content:center}.medical-quick-panel{width:min(760px,100%);max-height:95dvh;overflow:auto;background:var(--surface,#fff);color:var(--text,#20302d);border-radius:24px 24px 0 0;padding:1rem 1rem max(1rem,env(safe-area-inset-bottom))}.medical-quick-panel--form{width:min(620px,100%)}
-.medical-quick-header{display:flex;justify-content:space-between;align-items:flex-start;gap:1rem;border-bottom:1px solid var(--border,rgba(58,87,82,.12));padding:.5rem 0 1rem}.medical-quick-header p{margin:0;text-transform:uppercase;letter-spacing:.08em;font-size:.72rem;font-weight:700;color:#2f6f66}.medical-quick-header h2{margin:.15rem 0}.medical-quick-close{border:0;background:transparent;font-size:2rem;line-height:1;color:inherit}.medical-quick-toolbar{padding:1rem 0}.medical-quick-list{display:grid;gap:.75rem}.medical-quick-card{border:1px solid var(--border,rgba(58,87,82,.14));border-radius:16px;padding:1rem;display:flex;align-items:center;justify-content:space-between;gap:1rem}.medical-quick-card h3{margin:.2rem 0}.medical-quick-card p,.medical-quick-card small{margin:0;opacity:.75}.medical-quick-form{display:grid;gap:1rem;padding:1rem 0}.medical-quick-form label{display:grid;gap:.4rem;font-weight:700}.medical-quick-form input{width:100%;box-sizing:border-box;border:1px solid var(--border,rgba(58,87,82,.22));background:var(--surface,#fff);color:inherit;border-radius:12px;padding:.9rem;font:inherit}.medical-quick-footer{display:flex;gap:.75rem;justify-content:flex-end;margin-top:.5rem}.medical-quick-toast-region{position:fixed;z-index:14000;top:16px;left:50%;transform:translateX(-50%);display:grid;gap:.5rem;width:min(92vw,520px)}.medical-quick-toast{padding:12px 16px;border-radius:12px;background:#225d54;color:#fff;font-weight:700;box-shadow:0 12px 32px rgba(0,0,0,.25)}.medical-quick-toast--error{background:#9b2c2c}
+.medical-quick-header{display:flex;justify-content:space-between;align-items:flex-start;gap:1rem;border-bottom:1px solid var(--border,rgba(58,87,82,.12));padding:.5rem 0 1rem}.medical-quick-header p{margin:0;text-transform:uppercase;letter-spacing:.08em;font-size:.72rem;font-weight:700;color:#2f6f66}.medical-quick-header h2{margin:.15rem 0}.medical-quick-close{border:0;background:transparent;font-size:2rem;line-height:1;color:inherit}.medical-quick-toolbar{padding:1rem 0}.medical-quick-list{display:grid;gap:.75rem}.medical-quick-card{border:1px solid var(--border,rgba(58,87,82,.14));border-radius:16px;padding:1rem;display:flex;align-items:center;justify-content:space-between;gap:1rem}.medical-quick-card h3{margin:.2rem 0}.medical-quick-card p,.medical-quick-card small{margin:0;opacity:.75}.medical-quick-form{display:grid;gap:1rem;padding:1rem 0}.medical-quick-form label{display:grid;gap:.4rem;font-weight:700}.medical-quick-form input{width:100%;box-sizing:border-box;border:1px solid var(--border,rgba(58,87,82,.22));background:var(--surface,#fff);color:inherit;border-radius:12px;padding:.9rem;font:inherit}.medical-quick-required,.medical-quick-optional{font-size:.72rem;font-weight:600;opacity:.62}.medical-quick-required{color:#2f6f66;opacity:1}.medical-quick-footer{display:flex;gap:.75rem;justify-content:flex-end;margin-top:.5rem}.medical-quick-toast-region{position:fixed;z-index:14000;top:16px;left:50%;transform:translateX(-50%);display:grid;gap:.5rem;width:min(92vw,520px)}.medical-quick-toast{padding:12px 16px;border-radius:12px;background:#225d54;color:#fff;font-weight:700;box-shadow:0 12px 32px rgba(0,0,0,.25)}.medical-quick-toast--error{background:#9b2c2c}
 @media (max-width:640px){.medical-quick-panel{border-radius:0;width:100%;height:100dvh;max-height:100dvh}.medical-quick-card{align-items:flex-start}.medical-quick-footer{position:sticky;bottom:0;background:var(--surface,#fff);padding:.75rem 0}.medical-quick-footer .button{flex:1}}
 `;
 document.head.append(style);
