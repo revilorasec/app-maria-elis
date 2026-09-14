@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.4.0 - 2026-09-14
+
+- Adicionadas as categorias Pai, Mãe, Familiar, Babá, Médico(a) e Amigo(a).
+- Criada a tela administrativa de permissões por categoria.
+- Separadas as permissões e telas de Fotos e Documentos.
+- Criada a área de Receitas culinárias com ingredientes, preparo, foto e links.
+- Ajustado o perfil Babá para agenda, medicamentos, rotina, registros, fotos, receitas e emergência, sem acesso a documentos.
+- Mantida a mesma base de dados para HTML/PWA e APK Android.
+
 ## 0.2.0 - 2026-07-12 — Fase 1
 
 - Removidos os dados fictícios do arquivo inicial e adicionada limpeza global de exemplos.

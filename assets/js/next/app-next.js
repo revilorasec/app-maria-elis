@@ -1,14 +1,15 @@
-import { supabase, signInWithPin, signOut, currentSession } from './supabase.js?v=19';
-import { INACTIVITY_MS } from './config.js?v=19';
-import { createPermissionChecker, roleLabel } from './permissions.js?v=19';
-import { renderFilePicker, bindFilePreview, uploadSelectedFile, uploadFile } from './file-picker.js?v=19';
-import { cropImage } from './photo-editor.js?v=19';
-import { syncMedicationTasks, completeCareTask } from './care-service.js?v=19';
-import { addIcsToCalendar } from './ics.js?v=19';
-import { planLegacyImport } from './migration-preview.js?v=19';
-import { listUsers, createUser, updateUser, resetUserPin, setUserBlock, unblockUser } from './identity-client.js?v=19';
-import { listDocuments, archiveDocument, openDocument } from './document-service.js?v=19';
-import { listRoutineTasks, listOpenRoutineTasks, loadRoutineTask, createRoutineTask, respondRoutineTask, toggleRoutineItem, startRoutineTask, stopRoutineTask, listRoutineTemplates, loadRoutineTemplate, saveRoutineTemplate, listDailyLogs, createDailyLog, attachDailyLogFile, listEmergencyHospitals, createEmergencyHospital, listUpcomingEvents, acknowledgeEvent } from './routine-service.js?v=19';
+import { supabase, signInWithPin, signOut, currentSession } from './supabase.js?v=20';
+import { INACTIVITY_MS } from './config.js?v=20';
+import { createPermissionChecker, roleLabel, permissionLabel } from './permissions.js?v=20';
+import { renderFilePicker, bindFilePreview, uploadSelectedFile, uploadFile } from './file-picker.js?v=20';
+import { cropImage } from './photo-editor.js?v=20';
+import { syncMedicationTasks, completeCareTask } from './care-service.js?v=20';
+import { addIcsToCalendar } from './ics.js?v=20';
+import { planLegacyImport } from './migration-preview.js?v=20';
+import { listUsers, createUser, updateUser, resetUserPin, setUserBlock, unblockUser, setRolePermission } from './identity-client.js?v=20';
+import { listDocuments, archiveDocument, openDocument } from './document-service.js?v=20';
+import { listRoutineTasks, listOpenRoutineTasks, loadRoutineTask, createRoutineTask, respondRoutineTask, toggleRoutineItem, startRoutineTask, stopRoutineTask, listRoutineTemplates, loadRoutineTemplate, saveRoutineTemplate, listDailyLogs, createDailyLog, attachDailyLogFile, listEmergencyHospitals, createEmergencyHospital, listUpcomingEvents, acknowledgeEvent } from './routine-service.js?v=20';
+import { listRecipes, loadRecipe, saveRecipe, deleteRecipe } from './recipe-service.js?v=20';
 
 const app = document.querySelector('#app');
 const LOGIN_EMAIL_STORAGE_KEY = 'maria-elis-login-email-v1';
@@ -50,7 +51,7 @@ const esc = (value) => String(value ?? '').replace(/[&<>'"]/g, (char) => ({
 }[char]));
 const attr = esc;
 const can = (code) => state.context?.can?.(code) === true;
-const isAdmin = () => state.context?.membership?.role === 'admin';
+const isAdmin = () => ['admin', 'father', 'mother'].includes(state.context?.membership?.role);
 const canManage = (code) => isAdmin() || can(code);
 const isCaregiver = () => state.context?.membership?.role === 'caregiver';
 const canQuickRegister = () => can('daily_logs.create') || isAdmin();
@@ -120,6 +121,16 @@ const addressText = (value) => {
   if (typeof value === 'string') return value;
   return value.formatted || [value.street, value.number, value.complement, value.neighborhood, value.city, value.state, value.postalCode].filter(Boolean).join(', ');
 };
+const safeExternalUrl = (value) => {
+  try {
+    const url = new URL(String(value || '').trim());
+    return ['http:', 'https:'].includes(url.protocol) ? url.href : '';
+  } catch {
+    return '';
+  }
+};
+const jsonList = (value) => Array.isArray(value) ? value.map((item) => String(item || '').trim()).filter(Boolean) : [];
+const lines = (value) => String(value || '').split(/\r?\n/).map((item) => item.trim()).filter(Boolean);
 const currentUserId = () => state.context?.session?.user?.id || '';
 const eventAcknowledgedByMe = (event) =>
   state.acknowledgedEventIds.has(event.id)
@@ -186,7 +197,7 @@ const normalizeErrorMessage = (error) => {
   return Object.entries(mapping).find(([key]) => raw.includes(key))?.[1] || raw || 'Não foi possível concluir a operação.';
 };
 const icon = (name) => ({
-  home: '⌂', contacts: '◎', register: '+', agenda: '▣', more: '•••', files: '▤',
+  home: '⌂', contacts: '◎', register: '+', agenda: '▣', more: '•••', files: '▤', recipes: '♨',
   medications: '✚', child: '♡', users: '♙', migration: '⇄', phone: '☎', whatsapp: '◉',
   edit: '✎', lock: '⌁', unlock: '✓', download: '↓', archive: '⌫', calendar: '▦',
   calendarAdd: '<svg class="calendar-add-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="3.5" y="5" width="17" height="15.5" rx="2.5"></rect><path d="M7.5 3v4M16.5 3v4M3.5 9.5h17M12 12.5v5M9.5 15h5"></path></svg>', task: '✓',
@@ -245,17 +256,20 @@ async function loadContext() {
     family_id: access.data.family_id,
     role: access.data.role,
   };
-  const [roleRows, memberRows] = await Promise.all([
+  const [defaultRoleRows, familyRoleRows, memberRows] = await Promise.all([
     supabase.from('role_permissions').select('permission_code,allowed').eq('role', membership.role),
+    supabase.from('family_role_permissions').select('permission_code,allowed').eq('family_id', membership.family_id).eq('role', membership.role),
     supabase.from('membership_permissions').select('permission_code,allowed').eq('membership_id', membership.id),
   ]);
+  const rolePermissions = new Map((defaultRoleRows.data || []).map((item) => [item.permission_code, item]));
+  for (const item of familyRoleRows.data || []) rolePermissions.set(item.permission_code, item);
   return {
     session,
     membership,
     profile: { display_name: access.data.display_name },
     can: createPermissionChecker({
       role: membership.role,
-      rolePermissions: roleRows.data || [],
+      rolePermissions: [...rolePermissions.values()],
       overrides: memberRows.data || [],
     }),
   };
@@ -679,7 +693,7 @@ function userModal(record = {}) {
       <div class="form-grid"><label>E-mail<input name="email" type="email" value="${attr(record.email || '')}" required autocomplete="email"></label><label>${editing ? 'Novo PIN temporário (opcional)' : 'PIN temporário'}<input name="pin" inputmode="numeric" pattern="[0-9]{6,12}" minlength="6" maxlength="12" ${editing ? '' : 'required'}></label></div>
       <div class="form-grid"><label>Telefone<input name="phone" value="${attr(record.phone_normalized || '')}" inputmode="tel"></label><label>WhatsApp<input name="whatsapp" value="${attr(record.whatsapp_normalized || '')}" inputmode="tel"></label></div>
       <label>Endereço<input name="address" value="${attr(address)}" autocomplete="street-address"></label>
-      <div class="form-grid"><label>Papel de acesso<select name="role"><option value="guardian" ${record.role === 'guardian' ? 'selected' : ''}>Responsável</option><option value="caregiver" ${record.role === 'caregiver' ? 'selected' : ''}>Perfil Babá</option><option value="grandparent" ${record.role === 'grandparent' ? 'selected' : ''}>Avô ou avó</option><option value="visitor" ${record.role === 'visitor' ? 'selected' : ''}>Visitante</option><option value="custom" ${record.role === 'custom' ? 'selected' : ''}>Personalizado</option></select></label><label>Data de início<input name="startsOn" type="date" value="${attr(dateInputValue(record.starts_at) || todayIso())}"></label></div>
+      <div class="form-grid"><label>Categoria de acesso<select name="role"><option value="father" ${record.role === 'father' || record.role === 'admin' ? 'selected' : ''}>Pai — acesso total</option><option value="mother" ${record.role === 'mother' || record.role === 'guardian' ? 'selected' : ''}>Mãe — acesso total</option><option value="grandparent" ${record.role === 'grandparent' ? 'selected' : ''}>Familiar</option><option value="caregiver" ${record.role === 'caregiver' ? 'selected' : ''}>Babá</option><option value="doctor" ${record.role === 'doctor' ? 'selected' : ''}>Médico(a)</option><option value="friend" ${record.role === 'friend' || record.role === 'visitor' ? 'selected' : ''}>Amigo(a)</option></select></label><label>Data de início<input name="startsOn" type="date" value="${attr(dateInputValue(record.starts_at) || todayIso())}"></label></div>
       <div class="form-grid"><label>Contato de emergência<input name="emergencyContactName" value="${attr(record.emergency_contact_name || '')}"></label><label>Telefone de emergência<input name="emergencyContactPhone" value="${attr(record.emergency_contact_phone || '')}" inputmode="tel"></label></div>
       <label>Observações<textarea name="notes">${esc(record.notes || '')}</textarea></label>
       ${editing ? `<section class="user-access-controls"><h3>Controle de acesso</h3><p>${blocked ? 'Este acesso está bloqueado.' : 'Este acesso está ativo.'}</p><div><button type="button" class="button button--secondary" data-user-pin="${attr(id)}">Redefinir PIN</button>${blocked ? `<button type="button" class="button" data-user-unblock="${attr(id)}">Desbloquear acesso</button>` : `<button type="button" class="button button--danger" data-user-block="${attr(id)}">Bloquear acesso</button>`}</div></section>` : ''}
@@ -817,12 +831,86 @@ function childModal(record = null) {
   </section></div>`;
 }
 
+async function photosPage() {
+  if (!can('photos.view')) return denyPage();
+  let files = [];
+  let listError = '';
+  try {
+    files = await listDocuments('active', 'photos');
+  } catch (error) {
+    listError = error.message;
+  }
+  const uploadAction = canManage('photos.create') ? '<button class="button button--small" data-action="new-photo">Adicionar foto</button>' : '';
+  const tiles = await Promise.all(files.map(async (file) => {
+    const id = file.id || file.fileId || '';
+    const url = await privateFileUrl(id).catch(() => '');
+    const name = file.originalName || 'Foto';
+    return `<button type="button" class="photo-tile" data-file-open="${attr(id)}" aria-label="Abrir ${attr(name)}">${url ? `<img src="${attr(url)}" alt="${attr(name)}" loading="lazy">` : `<span>${icon('photo')}</span>`}<small>${esc(name)}</small></button>`;
+  }));
+  const content = tiles.length ? `<section class="photo-gallery">${tiles.join('')}</section>` : emptyState('Nenhuma foto', listError || 'As fotos da família e dos registros aparecerão aqui.', uploadAction);
+  return `${pageHeading('Fotos', 'Galeria separada dos documentos privados.', uploadAction)}${content}${listError ? `<p class="permission-note">${esc(listError)}</p>` : ''}`;
+}
+
+function photoModal() {
+  return `<div class="modal-backdrop"><section class="modal" role="dialog" aria-modal="true" data-modal-panel><button type="button" class="modal__close" data-action="close-modal">×</button><h2>Adicionar foto</h2><form id="photo-form">${renderFilePicker({ id: 'gallery-photo', label: 'Tirar ou escolher foto', accept: 'image/*', avatar: true })}<label>Categoria<select name="category"><option value="daily">Dia a dia</option><option value="meal">Alimentação</option><option value="activity">Atividade</option><option value="health">Saúde</option><option value="other">Outra</option></select></label><div class="next-form-actions"><button type="button" class="button button--secondary" data-action="close-modal">Cancelar</button><button class="button">Salvar foto</button></div></form></section></div>`;
+}
+
+const recipeCategoryLabel = (value) => ({ breakfast: 'Café da manhã', lunch: 'Almoço', snack: 'Lanche', dinner: 'Jantar', dessert: 'Sobremesa', drink: 'Bebida', other: 'Outra' })[value] || 'Outra';
+
+async function recipesPage() {
+  if (!can('recipes.view')) return denyPage();
+  const recipes = await listRecipes();
+  const action = canManage('recipes.create') ? '<button class="button button--small" data-action="new-recipe">Adicionar</button>' : '';
+  const cards = await Promise.all(recipes.map(async (recipe) => {
+    const photoUrl = recipe.photo_file_id ? await privateFileUrl(recipe.photo_file_id).catch(() => '') : '';
+    const ingredients = jsonList(recipe.ingredients);
+    return `<button type="button" class="record-card record-card--button recipe-card" data-recipe-open="${attr(recipe.id)}">${photoUrl ? `<img class="recipe-card__photo" src="${attr(photoUrl)}" alt="${attr(recipe.title)}">` : `<span class="record-card__icon">${icon('recipes')}</span>`}<div><h2>${esc(recipe.title)}</h2><p>${esc(recipeCategoryLabel(recipe.category))}</p><small>${ingredients.length} ingrediente(s)</small></div><b>›</b></button>`;
+  }));
+  return `${pageHeading('Receitas culinárias', 'Ingredientes, preparo, fotos e links para consultar durante os cuidados.', action)}<section class="record-list next-record-list">${cards.length ? cards.join('') : emptyState('Nenhuma receita', canManage('recipes.create') ? 'Cadastre a primeira receita da Maria Elis.' : 'Nenhuma receita foi cadastrada.', action)}</section>`;
+}
+
+function recipeModal(record = {}) {
+  const editing = Boolean(record.id);
+  return `<div class="modal-backdrop"><section class="modal modal--wide" role="dialog" aria-modal="true" data-modal-panel><button type="button" class="modal__close" data-action="close-modal">×</button><h2>${editing ? 'Editar receita' : 'Nova receita'}</h2><form id="recipe-form"><input type="hidden" name="id" value="${attr(record.id || '')}"><div class="form-grid"><label>Nome da receita<input name="title" required maxlength="160" value="${attr(record.title || '')}"></label><label>Categoria<select name="category"><option value="breakfast" ${record.category === 'breakfast' ? 'selected' : ''}>Café da manhã</option><option value="lunch" ${record.category === 'lunch' ? 'selected' : ''}>Almoço</option><option value="snack" ${record.category === 'snack' ? 'selected' : ''}>Lanche</option><option value="dinner" ${record.category === 'dinner' ? 'selected' : ''}>Jantar</option><option value="dessert" ${record.category === 'dessert' ? 'selected' : ''}>Sobremesa</option><option value="drink" ${record.category === 'drink' ? 'selected' : ''}>Bebida</option><option value="other" ${!record.category || record.category === 'other' ? 'selected' : ''}>Outra</option></select></label></div><label>Ingredientes <small>(um por linha, incluindo a quantidade)</small><textarea name="ingredients" required placeholder="1 banana madura&#10;2 colheres de aveia">${esc(jsonList(record.ingredients).join('\n'))}</textarea></label><label>Modo de preparo<textarea name="instructions" placeholder="Descreva o preparo passo a passo">${esc(record.instructions || '')}</textarea></label><label>Links <small>(um por linha)</small><textarea name="links" placeholder="https://...">${esc(jsonList(record.links).join('\n'))}</textarea></label><label>Alerta de alergia ou restrição<input name="allergyAlert" value="${attr(record.allergy_alert || '')}"></label><label>Observações<textarea name="notes">${esc(record.notes || '')}</textarea></label>${renderFilePicker({ id: 'recipe-photo', label: editing ? 'Substituir foto (opcional)' : 'Adicionar foto (opcional)', accept: 'image/*', avatar: true })}<div class="next-form-actions"><button type="button" class="button button--secondary" data-action="close-modal">Cancelar</button><button class="button">Salvar receita</button></div></form></section></div>`;
+}
+
+function recipeDetailsModal(record) {
+  const ingredients = jsonList(record.ingredients);
+  const links = jsonList(record.links).map(safeExternalUrl).filter(Boolean);
+  return `<div class="modal-backdrop"><section class="modal modal--wide recipe-details" role="dialog" aria-modal="true" data-modal-panel><button type="button" class="modal__close" data-action="close-modal">×</button>${record.photoUrl ? `<img class="recipe-details__hero" src="${attr(record.photoUrl)}" alt="${attr(record.title)}">` : ''}<p class="eyebrow">${esc(recipeCategoryLabel(record.category))}</p><h2>${esc(record.title)}</h2>${record.allergy_alert ? `<div class="instruction-box instruction-box--danger"><strong>Atenção</strong><p>${esc(record.allergy_alert)}</p></div>` : ''}<section><h3>Ingredientes</h3><ul class="recipe-list">${ingredients.map((item) => `<li>${esc(item)}</li>`).join('')}</ul></section>${record.instructions ? `<section><h3>Modo de preparo</h3><p class="recipe-preparation">${esc(record.instructions)}</p></section>` : ''}${links.length ? `<section><h3>Links</h3><div class="recipe-links">${links.map((url, index) => `<a class="button button--secondary" href="${attr(url)}" target="_blank" rel="noopener">Abrir link ${index + 1}</a>`).join('')}</div></section>` : ''}${record.notes ? `<section><h3>Observações</h3><p>${esc(record.notes)}</p></section>` : ''}<div class="next-form-actions"><button type="button" class="button button--secondary" data-action="close-modal">Fechar</button>${canManage('recipes.edit') ? `<button type="button" class="button" data-recipe-edit="${attr(record.id)}">Editar</button>` : ''}${canManage('recipes.delete') ? `<button type="button" class="button button--danger" data-recipe-delete="${attr(record.id)}">Excluir</button>` : ''}</div></section></div>`;
+}
+
+async function accessCategoriesPage() {
+  if (!can('users.manage')) return denyPage();
+  const familyId = state.context.membership.family_id;
+  const [definitionsResult, defaultsResult, overridesResult] = await Promise.all([
+    supabase.from('permission_definitions').select('code,resource,action,description').order('resource').order('action'),
+    supabase.from('role_permissions').select('role,permission_code,allowed'),
+    supabase.from('family_role_permissions').select('role,permission_code,allowed').eq('family_id', familyId),
+  ]);
+  if (definitionsResult.error || defaultsResult.error || overridesResult.error) throw definitionsResult.error || defaultsResult.error || overridesResult.error;
+  const definitions = definitionsResult.data || [];
+  const defaults = new Map((defaultsResult.data || []).map((item) => [`${item.role}:${item.permission_code}`, item.allowed]));
+  const overrides = new Map((overridesResult.data || []).map((item) => [`${item.role}:${item.permission_code}`, item.allowed]));
+  const roles = [
+    ['grandparent', 'Familiar'], ['caregiver', 'Babá'], ['doctor', 'Médico(a)'], ['friend', 'Amigo(a)'],
+  ];
+  const modules = new Map();
+  for (const item of definitions) {
+    if (!modules.has(item.resource)) modules.set(item.resource, []);
+    modules.get(item.resource).push(item);
+  }
+  const moduleNames = { child: 'Dados da criança', contacts: 'Contatos e emergência', daily_logs: 'Registros diários', events: 'Agenda', files: 'Documentos', photos: 'Fotos', recipes: 'Receitas culinárias', medications: 'Medicamentos', tasks: 'Rotina e afazeres', health: 'Saúde e desenvolvimento', users: 'Usuários e acessos' };
+  const cards = roles.map(([role, label]) => `<details class="permission-category" ${role === 'caregiver' ? 'open' : ''}><summary><strong>${esc(label)}</strong><span>Configurar acessos</span></summary><div class="permission-modules">${[...modules.entries()].map(([resource, items]) => `<section class="permission-module"><h3>${esc(moduleNames[resource] || resource)}</h3>${items.map((item) => { const key = `${role}:${item.code}`; const checked = overrides.has(key) ? overrides.get(key) : defaults.get(key); return `<label class="permission-toggle"><input type="checkbox" data-role-permission data-role="${attr(role)}" data-code="${attr(item.code)}" ${checked ? 'checked' : ''}><span>${esc(permissionLabel(item.code))}</span></label>`; }).join('')}</section>`).join('')}</div></details>`).join('');
+  return `${pageHeading('Categorias de acesso', 'Pai e Mãe têm acesso total. Configure abaixo o que as outras categorias podem fazer.')}<section class="parent-access-note"><strong>Pai e Mãe</strong><span>Acesso total e permanente a todas as áreas.</span></section><section class="permission-categories">${cards}</section>`;
+}
+
 async function documentsPage() {
   if (!can('files.view')) return denyPage();
   let files = [];
   let listError = '';
   try {
-    files = await listDocuments('active');
+    files = await listDocuments('active', 'documents');
   } catch (error) {
     listError = error.message;
   }
@@ -843,14 +931,19 @@ function fileModal() {
 
 function morePage() {
   const cards = [
-    quickCard('contacts', 'contacts', 'Contatos', 'Familiares, médicos e emergências'),
-    quickCard('medications', 'medications', 'Medicamentos', 'Cadastro e horários'),
-    quickCard('documents', 'files', 'Documentos', 'Fotos, PDFs e comprovantes'),
-    quickCard('child', 'child', 'Dados da criança', 'Saúde e informações privadas'),
-    quickCard('emergency', 'emergency', 'Emergência', 'Alergias, hospitais e contatos'),
-    quickCard('templates', 'template', 'Títulos e regras', 'Padrões de almoço, soneca, banho e outros'),
-  ];
-  if (can('users.manage')) cards.push(quickCard('users', 'users', 'Usuários', 'Acessos e PINs'));
+    can('contacts.view') ? quickCard('contacts', 'contacts', 'Contatos', 'Familiares, médicos e emergências') : '',
+    can('medications.view') ? quickCard('medications', 'medications', 'Medicamentos', 'Orientações e horários') : '',
+    can('recipes.view') ? quickCard('recipes', 'recipes', 'Receitas culinárias', 'Ingredientes, preparo, fotos e links') : '',
+    can('photos.view') ? quickCard('photos', 'photo', 'Fotos', 'Galeria da Maria Elis') : '',
+    can('files.view') ? quickCard('documents', 'files', 'Documentos', 'Arquivos privados e prescrições') : '',
+    can('child.view') ? quickCard('child', 'child', 'Dados da criança', 'Saúde e informações privadas') : '',
+    can('child.view') || can('contacts.view') ? quickCard('emergency', 'emergency', 'Emergência', 'Alergias, hospitais e contatos') : '',
+    canManage('tasks.manage') ? quickCard('templates', 'template', 'Títulos e regras', 'Padrões de almoço, soneca, banho e outros') : '',
+  ].filter(Boolean);
+  if (can('users.manage')) {
+    cards.push(quickCard('users', 'users', 'Usuários', 'Cadastros, acessos e PINs'));
+    cards.push(quickCard('access', 'lock', 'Categorias de acesso', 'Definir o que cada categoria pode fazer'));
+  }
   return `${pageHeading('Mais', 'Cadastros e configurações do responsável.')}<section class="next-feature-grid">${cards.join('')}</section><section class="settings-card"><div class="setting-line"><div><strong>Sessão protegida</strong><p>O aplicativo encerra o acesso após inatividade.</p></div><span class="status-pill status-pill--success">Ativo</span></div></section>`;
 }
 
@@ -865,6 +958,8 @@ function quickRegisterModal() {
     canManage('medications.edit') ? `<button class="register-type" data-action="new-medication"><span>${icon('medications')}</span>Medicamento</button>` : '',
     canManage('events.edit') ? `<button class="register-type" data-action="new-event"><span>${icon('calendar')}</span>Evento</button>` : '',
     canManage('files.create') ? `<button class="register-type" data-action="new-file"><span>${icon('files')}</span>Documento</button>` : '',
+    canManage('photos.create') ? `<button class="register-type" data-action="new-photo"><span>${icon('photo')}</span>Foto</button>` : '',
+    canManage('recipes.create') ? `<button class="register-type" data-action="new-recipe"><span>${icon('recipes')}</span>Receita culinária</button>` : '',
   ].filter(Boolean).join('');
   return `<div class="modal-backdrop"><section class="modal" role="dialog" aria-modal="true" data-modal-panel><button type="button" class="modal__close" data-action="close-modal" aria-label="Fechar">×</button><h2>O que deseja registrar?</h2><div class="register-picker">${actions || '<p class="permission-note">Seu perfil não possui ações de cadastro.</p>'}</div></section></div>`;
 }
@@ -877,7 +972,10 @@ async function pageBody() {
   switch (state.page) {
     case 'contacts': return contactsPage();
     case 'users': return usersPage();
+    case 'access': return accessCategoriesPage();
     case 'documents': return documentsPage();
+    case 'photos': return photosPage();
+    case 'recipes': return recipesPage();
     case 'medications': return medicationsPage();
     case 'agenda': return agendaPage();
     case 'child': return childPage();
@@ -916,6 +1014,9 @@ function modalHtml() {
     case 'medication': return medicationModal();
     case 'event': return eventModal(state.modal.data);
     case 'file': return fileModal();
+    case 'photo': return photoModal();
+    case 'recipe': return recipeModal(state.modal.data);
+    case 'recipe-details': return recipeDetailsModal(state.modal.data);
     case 'child': return childModal(state.modal.data);
     case 'task': return taskModal(state.modal.data);
     case 'template': return routineTemplateModal(state.modal.data);
@@ -1010,6 +1111,12 @@ async function openRoutineTemplate(id) {
   openModal('template', template);
 }
 
+async function openRecipe(id) {
+  const recipe = await loadRecipe(id);
+  const photoUrl = recipe.photo_file_id ? await privateFileUrl(recipe.photo_file_id).catch(() => '') : '';
+  openModal('recipe-details', { ...recipe, photoUrl });
+}
+
 async function openCalendarEvent(id) {
   const result = await supabase.from('calendar_events')
     .select('*')
@@ -1097,6 +1204,7 @@ function bind() {
     }, 'Confirmação registrada.');
   }));
   document.querySelectorAll('[data-user-open]').forEach((button) => button.addEventListener('click', () => runBusy(() => openUser(button.dataset.userOpen))));
+  document.querySelectorAll('[data-recipe-open]').forEach((button) => button.addEventListener('click', () => runBusy(() => openRecipe(button.dataset.recipeOpen))));
   document.querySelectorAll('[data-history-days]').forEach((button) => button.addEventListener('click', async () => {
     const days = Number(button.dataset.historyDays || 30);
     state.historyTo = todayIso();
@@ -1120,6 +1228,12 @@ function bind() {
   }));
   document.querySelectorAll('[data-action="new-file"]').forEach((button) => button.addEventListener('click', () => {
     if (requirePermission('files.create')) openModal('file');
+  }));
+  document.querySelectorAll('[data-action="new-photo"]').forEach((button) => button.addEventListener('click', () => {
+    if (requirePermission('photos.create')) openModal('photo');
+  }));
+  document.querySelectorAll('[data-action="new-recipe"]').forEach((button) => button.addEventListener('click', () => {
+    if (requirePermission('recipes.create')) openModal('recipe');
   }));
   document.querySelectorAll('[data-action="new-task"]').forEach((button) => button.addEventListener('click', () => {
     if (requirePermission('tasks.manage')) runBusy(openTaskCreator);
@@ -1209,6 +1323,27 @@ function bind() {
       state.page = 'users';
       await render();
     }, 'Usuário desbloqueado.');
+  }));
+  document.querySelectorAll('[data-role-permission]').forEach((input) => input.addEventListener('change', async () => {
+    const allowed = input.checked;
+    input.disabled = true;
+    await runBusy(async () => {
+      await setRolePermission(state.context.membership.family_id, input.dataset.role, input.dataset.code, allowed);
+      await render();
+    }, 'Permissão atualizada.');
+    input.disabled = false;
+  }));
+  document.querySelectorAll('[data-recipe-edit]').forEach((button) => button.addEventListener('click', () => {
+    if (requirePermission('recipes.edit')) openModal('recipe', state.modal.data);
+  }));
+  document.querySelectorAll('[data-recipe-delete]').forEach((button) => button.addEventListener('click', async () => {
+    if (!requirePermission('recipes.delete') || !confirm('Excluir esta receita?')) return;
+    await runBusy(async () => {
+      await deleteRecipe(button.dataset.recipeDelete);
+      state.modal = null;
+      state.page = 'recipes';
+      await render();
+    }, 'Receita excluída.');
   }));
   document.querySelectorAll('[data-file-open]').forEach((button) => button.addEventListener('click', () => runBusy(() => handleOpenDocument(button.dataset.fileOpen))));
   document.querySelectorAll('[data-file-archive]').forEach((button) => button.addEventListener('click', async () => {
@@ -1631,6 +1766,50 @@ function bind() {
     }, 'Arquivo enviado.');
   });
 
+  document.querySelector('#photo-form')?.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    if (!requirePermission('photos.create')) return;
+    const form = new FormData(event.currentTarget);
+    await runBusy(async () => {
+      await uploadSelectedFile(document.querySelector('#gallery-photo'), { fileType: 'gallery-photo', category: String(form.get('category') || 'other') });
+      state.modal = null;
+      state.page = 'photos';
+      await render();
+    }, 'Foto adicionada.');
+  });
+
+  document.querySelector('#recipe-form')?.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    const id = String(form.get('id') || '');
+    if (!requirePermission(id ? 'recipes.edit' : 'recipes.create')) return;
+    const rawLinks = lines(form.get('links'));
+    const recipeLinks = rawLinks.map(safeExternalUrl);
+    if (recipeLinks.some((url) => !url)) return toast('Informe apenas links completos iniciados por http:// ou https://.', 'warning');
+    await runBusy(async () => {
+      let saved = await saveRecipe({
+        id: id || null,
+        family_id: state.context.membership.family_id,
+        title: String(form.get('title') || '').trim(),
+        category: String(form.get('category') || 'other'),
+        ingredients: lines(form.get('ingredients')),
+        instructions: String(form.get('instructions') || '').trim(),
+        links: recipeLinks,
+        allergy_alert: String(form.get('allergyAlert') || '').trim(),
+        notes: String(form.get('notes') || '').trim(),
+        active: true,
+      });
+      const photo = document.querySelector('#recipe-photo')?.files?.[0];
+      if (photo) {
+        const uploaded = await uploadFile(photo, { fileType: 'recipe-photo', category: 'recipe', relatedRecordType: 'recipe', relatedRecordId: saved.id });
+        saved = await saveRecipe({ ...saved, photo_file_id: uploaded.id || uploaded.fileId || null });
+      }
+      state.modal = null;
+      state.page = 'recipes';
+      await render();
+    }, 'Receita salva.');
+  });
+
   document.querySelector('#migration-form')?.addEventListener('submit', (event) => {
     event.preventDefault();
     try {
@@ -1676,8 +1855,9 @@ function bind() {
   bindFilePreview('child-photo');
   bindFilePreview('health-card-photo');
   bindFilePreview('user-photo');
+  bindFilePreview('gallery-photo');
+  bindFilePreview('recipe-photo');
   bindPhotoPreview();
 }
 
 render();
-

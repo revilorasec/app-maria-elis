@@ -551,6 +551,80 @@ input:focus, select:focus, textarea:focus { border-color: var(--primary); box-sh
   .next-form-actions--spread .button { width: 100%; }
 }
 
+/* ACESSOS-FOTOS-RECEITAS-V20 */
+.photo-gallery {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 1rem;
+}
+.photo-tile {
+  overflow: hidden;
+  display: grid;
+  padding: 0;
+  border: 1px solid var(--line, #dce7e4);
+  border-radius: 18px;
+  background: #fff;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  box-shadow: 0 8px 22px rgba(26, 67, 60, .08);
+}
+.photo-tile img,
+.photo-tile > span {
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: cover;
+}
+.photo-tile > span { display: grid; place-items: center; font-size: 2rem; background: #edf6f3; }
+.photo-tile small { padding: .7rem .8rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.recipe-card__photo {
+  width: 64px;
+  height: 64px;
+  object-fit: cover;
+  border-radius: 14px;
+}
+.recipe-details { display: grid; gap: 1rem; }
+.recipe-details__hero { width: 100%; max-height: 320px; object-fit: cover; border-radius: 18px; }
+.recipe-details section { display: grid; gap: .5rem; }
+.recipe-list { margin: 0; padding-left: 1.25rem; display: grid; gap: .45rem; }
+.recipe-preparation { white-space: pre-wrap; }
+.recipe-links { display: flex; flex-wrap: wrap; gap: .65rem; }
+.parent-access-note {
+  display: grid;
+  gap: .25rem;
+  padding: 1rem 1.1rem;
+  margin-bottom: 1rem;
+  border-radius: 16px;
+  background: #e8f5f1;
+  color: #173b34;
+}
+.permission-categories { display: grid; gap: 1rem; }
+.permission-category {
+  overflow: hidden;
+  border: 1px solid var(--line, #dce7e4);
+  border-radius: 18px;
+  background: #fff;
+}
+.permission-category summary {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem 1.1rem;
+  cursor: pointer;
+}
+.permission-category summary span { color: var(--muted, #667b76); font-size: .88rem; }
+.permission-modules { display: grid; grid-template-columns: repeat(auto-fit, minmax(245px, 1fr)); gap: .8rem; padding: 0 1rem 1rem; }
+.permission-module { display: grid; align-content: start; gap: .45rem; padding: .9rem; border-radius: 14px; background: #f7faf9; }
+.permission-module h3 { margin: 0 0 .35rem; font-size: 1rem; }
+.permission-toggle { display: flex; align-items: center; gap: .6rem; min-height: 34px; cursor: pointer; }
+.permission-toggle input { width: 20px; height: 20px; accent-color: #2f7e71; }
+
+@media (max-width: 560px) {
+  .photo-gallery { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .7rem; }
+  .permission-modules { grid-template-columns: 1fr; }
+  .permission-category summary { display: grid; }
+}
+
 
 /* Rotina familiar MVP v2: títulos padrão, cronômetro e câmera */
 .heading-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }

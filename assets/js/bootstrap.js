@@ -3,7 +3,7 @@ const next = params.get('mode') !== 'legacy';
 
 async function start() {
   if (next) {
-    await import('./next/app-next.js?v=19');
+    await import('./next/app-next.js?v=20');
   } else {
     await new Promise((resolve, reject) => {
       const script = document.createElement('script');
@@ -21,7 +21,6 @@ async function start() {
 }
 
 start();
-
 
 
 

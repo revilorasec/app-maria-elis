@@ -8,6 +8,15 @@ O Supabase/PostgreSQL guarda os dados estruturados com RLS e permissões por fam
 
 O modo antigo com login Microsoft foi mantido temporariamente apenas para contingência e consulta aos dados anteriores, usando `?mode=legacy` no fim da URL.
 
+## Categorias, fotos e receitas — versão 1.4.0
+
+- Categorias de acesso: Pai, Mãe, Familiar, Babá, Médico(a) e Amigo(a).
+- Pai e Mãe possuem acesso total; as demais categorias são configuradas em **Mais → Categorias de acesso**.
+- Fotos e documentos são áreas independentes. A Babá pode ver e adicionar fotos sem acessar documentos.
+- A Babá pode consultar agenda, medicamentos, receitas culinárias, contatos de emergência e hospitais, além de concluir afazeres e fazer registros diários.
+- Receitas culinárias aceitam foto, ingredientes, preparo, links, observações e alertas de alergia.
+- O HTML/PWA e o APK usam o mesmo Supabase e os mesmos arquivos privados no OneDrive/SharePoint.
+
 ## Modo legado com OneDrive
 
 O texto abaixo documenta o fluxo antigo. Ele não é mais a entrada padrão do aplicativo.

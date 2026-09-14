@@ -1,5 +1,5 @@
-import { SUPABASE_PUBLISHABLE_KEY, SUPABASE_URL } from './config.js?v=19';
-import { supabase, currentSession } from './supabase.js?v=19';
+import { SUPABASE_PUBLISHABLE_KEY, SUPABASE_URL } from './config.js?v=20';
+import { supabase, currentSession } from './supabase.js?v=20';
 
 const endpoint = `${SUPABASE_URL}/functions/v1/identity-gateway`;
 
@@ -30,3 +30,12 @@ export const setMyPin = (pin) => identityRequest('set-my-pin', { pin });
 
 export const updateUser = (input) => identityRequest('update-user', input);
 
+export async function setRolePermission(familyId, role, permissionCode, allowed) {
+  const result = await supabase.rpc('set_role_permission', {
+    target_family_id: familyId,
+    target_role: role,
+    target_permission_code: permissionCode,
+    target_allowed: Boolean(allowed),
+  });
+  if (result.error) throw result.error;
+}
