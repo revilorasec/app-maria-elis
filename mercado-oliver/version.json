@@ -1,5 +1,5 @@
 {
-  "version": "0.3.3",
-  "build": "2026.09.20.3",
-  "notes": "Histórico abre notas, exclusão, fotos da galeria, observações e fotos por item"
+  "version": "0.3.4",
+  "build": "2026.09.20.4",
+  "notes": "Abrir/excluir notas, editar itens, observações, fotos e lista global de compras"
 }
