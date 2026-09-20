@@ -1,5 +1,5 @@
 {
-  "version": "0.3.0",
-  "build": "2026.09.20.3",
-  "notes": "NFC-e em lista visual, reconciliação automática e detalhes fiscais recolhidos"
+  "version": "0.3.1",
+  "build": "2026.09.20.4",
+  "notes": "Corrige detecção de atualização para ignorar versões antigas"
 }
