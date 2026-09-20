@@ -52,6 +52,24 @@
 .bought-row .meta{margin-top:3px}
 .product-card,.store-card{background:#fff;border:1px solid var(--line);border-radius:16px;padding:12px;margin:8px 0;cursor:pointer}
 .product-card:hover,.store-card:hover{background:#fbfdfb}
+.product-card{padding:14px 13px}
+.product-card-simple{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.product-card-simple .product-name{min-width:0}
+.product-card-simple .product-average{text-align:right;white-space:nowrap}
+.product-card-simple .product-average small{display:block;color:var(--muted);font-size:10px;margin-bottom:2px}
+.product-card-simple .product-average b{font-size:15px}
+.product-photo-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:8px}
+.product-photo{position:relative}
+.product-photo img{width:100%;aspect-ratio:1/1;object-fit:contain;background:#fff;border:1px solid var(--line);border-radius:13px}
+.product-photo button{position:absolute;top:4px;right:4px;border:0;border-radius:999px;width:27px;height:27px;background:#fff;color:#a72d2d;font-weight:900;box-shadow:0 1px 6px #0003}
+.auto-photo-label{position:absolute;left:5px;bottom:5px;background:#ffffffdf;border:1px solid var(--line);border-radius:999px;padding:3px 6px;font-size:9px;color:var(--muted)}
+.nutrition-table{width:100%;border-collapse:collapse;font-size:12px}
+.nutrition-table th,.nutrition-table td{border-bottom:1px solid var(--line);padding:8px 6px;text-align:right}
+.nutrition-table th:first-child,.nutrition-table td:first-child{text-align:left}
+.nutrition-table th{font-size:10px;color:var(--muted);font-weight:700}
+.recognition-ok{background:#edf8f1;border-color:#bfdfca;color:#205e3e}
+.recognition-warn{background:#fff8dc;border-color:#eadb93;color:#735f00}
+.recognition-bad{background:#fff1f1;border-color:#efcaca;color:#963535}
 .product-name,.store-name{font-size:14px;font-weight:800}
 .product-stats,.store-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px}
 .stat-mini{background:#f7faf8;border:1px solid var(--line);border-radius:12px;padding:9px}
@@ -126,7 +144,7 @@
 <div class="app">
   <div class="top"><div class="logo">MO</div><div><b>Mercado Oliver</b><small>App de testes · atualizável no celular</small></div></div>
 <div class="app-tools">
-  <span id="versionLabel" class="app-version">v0.4.0</span>
+  <span id="versionLabel" class="app-version">v0.4.1</span>
   <button id="installAppBtn" class="btn soft">Instalar app</button>
   <button id="checkUpdateBtn" class="btn">Verificar atualização</button>
 </div>
@@ -320,6 +338,40 @@
     <div class="grow"><h2 id="productDetailTitle">Produto</h2><div id="productDetailSub" class="meta"></div></div>
     <button id="closeProductDetailTop" class="btn close-x" aria-label="Fechar">×</button>
   </div>
+
+  <div id="productRecognitionStatus" class="banner" style="margin-top:10px">Abrindo ficha do produto…</div>
+  <button id="recognizeProductBtn" class="btn soft block" style="margin-top:8px">Reconhecer / atualizar dados do produto</button>
+
+  <div class="receipt-section">
+    <h2>Foto do produto</h2>
+    <div id="productPhotoGrid" class="product-photo-grid"></div>
+    <div class="row" style="margin-top:8px">
+      <label class="btn soft">Tirar foto<input id="productPhotoCamera" type="file" accept="image/*" capture="environment" hidden></label>
+      <label class="btn">Escolher do telefone<input id="productPhotoLibrary" type="file" accept="image/*" multiple hidden></label>
+    </div>
+  </div>
+
+  <div class="receipt-section">
+    <h2>Informações do produto</h2>
+    <div class="item-editor-grid">
+      <div class="wide"><label class="meta">Nome identificado</label><input id="productMetaName" class="field"></div>
+      <div><label class="meta">Marca</label><input id="productMetaBrand" class="field"></div>
+      <div><label class="meta">EAN / código de barras</label><input id="productMetaBarcode" class="field" inputmode="numeric"></div>
+      <div class="wide"><label class="meta">Lista de ingredientes</label><textarea id="productMetaIngredients" class="field" rows="5" placeholder="Ingredientes do rótulo"></textarea></div>
+      <div class="wide"><label class="meta">Composição / descrição</label><textarea id="productMetaComposition" class="field" rows="4" placeholder="Composição, categoria ou descrição do produto"></textarea></div>
+    </div>
+    <button id="saveProductMetaBtn" class="btn primary block" style="margin-top:10px">Salvar informações do produto</button>
+  </div>
+
+  <div class="receipt-section">
+    <div class="row"><div class="grow"><h2 style="margin:0">Tabela nutricional</h2><div id="nutritionSource" class="meta"></div></div></div>
+    <div id="nutritionTable" class="nutrition-table-wrap" style="margin-top:8px"></div>
+    <details class="manual-fold">
+      <summary>Complementar tabela nutricional manualmente</summary>
+      <textarea id="productMetaNutritionManual" class="field" rows="5" style="margin-top:8px" placeholder="Ex.: Porção 200 ml; valor energético 120 kcal; carboidratos 18 g..."></textarea>
+    </details>
+  </div>
+
   <div id="productDetailStats" class="product-stats" style="margin-top:12px"></div>
   <div class="separator"></div>
   <h2>Histórico de preços</h2>
@@ -382,14 +434,15 @@
 
 <script>
 (function(){
-var APP_VERSION="0.4.0";
+var APP_VERSION="0.4.1";
 var FISCAL_API="https://dumoqktblhultwxmckbd.supabase.co/functions/v1/mercado-fiscal-qr";
+var PRODUCT_API="https://dumoqktblhultwxmckbd.supabase.co/functions/v1/mercado-product-info";
 var SUPABASE_ANON="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR1bW9xa3RibGh1bHR3eG1ja2JkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM4OTYzODQsImV4cCI6MjA5OTQ3MjM4NH0.7JXoeer17mPw9A4i6yJBTwTn0pBNL0FUkkBed9Y4qmg";
-var KEY="mercado_oliver_v3",qrZxingControls=null,qrZxingReader=null,qrVideoTrack=null,qrScanDone=false,qrTorchOn=false,qrZoomOn=false,pendingReceipt=null,lastPage="home",creatingList=false,editingItemIndex=null;
+var KEY="mercado_oliver_v3",qrZxingControls=null,qrZxingReader=null,qrVideoTrack=null,qrScanDone=false,qrTorchOn=false,qrZoomOn=false,pendingReceipt=null,lastPage="home",creatingList=false,editingItemIndex=null,editingProductKey=null;
 var reasons=["Não tinha","Qualidade ruim / feio","Preço alto","Troquei por outro","Desisti","Outro"];
 var state=load();
-function blank(){return {lists:[],current:null,standalonePurchases:[]}}
-function load(){try{return JSON.parse(localStorage.getItem(KEY))||blank()}catch(e){return blank()}}
+function blank(){return {lists:[],current:null,standalonePurchases:[],productMeta:{},productAliases:{}}}
+function load(){try{var s=JSON.parse(localStorage.getItem(KEY))||blank();s.productMeta=s.productMeta||{};s.productAliases=s.productAliases||{};return s}catch(e){return blank()}}
 function save(){localStorage.setItem(KEY,JSON.stringify(state));render()}
 function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2)}
 function esc(s){return String(s||"").replace(/[&<>"']/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c]})}
@@ -443,10 +496,29 @@ function storeKeyForPurchase(p){
   var cnpj=purchaseCnpj(p);if(cnpj)return"cnpj:"+cnpj;
   return"name:"+norm(purchaseMarketName(p))+"|"+norm(purchaseAddress(p));
 }
-function productKeyForItem(x){
-  var code=String(x?.code||"").replace(/\s+/g,"").trim();
-  if(code)return"code:"+code;
+function universalBarcode(v){
+  var raw=String(v||"").trim(),d=raw.replace(/\D/g,"");
+  return /^\d{8,14}$/.test(raw)&&d.length>=8&&d.length<=14?d:"";
+}
+function resolveProductKey(key){
+  var aliases=state.productAliases||(state.productAliases={}),seen={};
+  while(aliases[key]&&!seen[key]){seen[key]=1;key=aliases[key]}
+  return key;
+}
+function rawProductKeyForItem(x){
+  var ean=universalBarcode(x?.code);
+  if(ean)return"ean:"+ean;
   return"name:"+norm(x?.name||x?.description||"");
+}
+function productKeyForItem(x){return resolveProductKey(rawProductKeyForItem(x))}
+function productMetaForKey(key){
+  key=resolveProductKey(key);
+  state.productMeta=state.productMeta||{};
+  return state.productMeta[key]||(state.productMeta[key]={photos:[]});
+}
+function productDisplayName(group){
+  var m=productMetaForKey(group.key);
+  return String(m.name||group.name||"Produto").trim();
 }
 function allProductOccurrences(){
   var out=[];
@@ -483,6 +555,7 @@ function productGroups(){
     g.avgPrice=qty>0?total/qty:(prices.length?prices.reduce(function(a,b){return a+b},0)/prices.length:0);
     g.lastPrice=latest?.unitPrice||0;g.minPrice=prices.length?Math.min.apply(null,prices):0;g.maxPrice=prices.length?Math.max.apply(null,prices):0;
     g.totalQty=qty;g.purchaseCount=g.occurrences.length;
+    var meta=productMetaForKey(g.key);g.displayName=meta.name||g.name;g.barcode=meta.barcode||universalBarcode(g.code)||"";
     groups.push(g);
   });
   return groups.sort(function(a,b){return a.name.localeCompare(b.name,"pt-BR")});
@@ -512,28 +585,183 @@ function storeGroups(){
 function renderProducts(){
   var host=document.getElementById("productList"),search=document.getElementById("productSearch");if(!host)return;
   var q=norm(search?.value||""),groups=productGroups();
-  if(q)groups=groups.filter(function(g){return norm([g.name,g.code].join(" ")).includes(q)});
+  if(q)groups=groups.filter(function(g){return norm([g.displayName||g.name,g.name,g.code,g.barcode].join(" ")).includes(q)});
   host.innerHTML="";
   if(!groups.length){host.innerHTML="<div class='card meta sec'>Nenhum produto comprado encontrado.</div>";return}
   groups.forEach(function(g){
     var d=document.createElement("div");d.className="product-card";
-    d.innerHTML="<div class='row'><div class='grow'><div class='product-name'>"+esc(g.name)+"</div><div class='meta'>"+g.purchaseCount+" compra(s)"+(g.code?" · cód. "+esc(g.code):"")+"</div></div><div style='text-align:right'><div class='meta'>Preço médio</div><b>"+moneyBR(g.avgPrice)+(g.unit?" / "+esc(g.unit):"")+"</b></div></div><div class='product-stats' style='margin-top:9px'><div class='stat-mini'><small>Último preço</small><b>"+moneyBR(g.lastPrice)+"</b></div><div class='stat-mini'><small>Menor</small><b>"+moneyBR(g.minPrice)+"</b></div><div class='stat-mini'><small>Maior</small><b>"+moneyBR(g.maxPrice)+"</b></div></div>";
+    d.innerHTML="<div class='product-card-simple'><div class='product-name'>"+esc(g.displayName||g.name)+"</div><div class='product-average'><small>Preço médio</small><b>"+moneyBR(g.avgPrice)+"</b></div></div>";
     d.onclick=function(){openProductDetail(g.key)};host.appendChild(d);
   });
 }
-function openProductDetail(key){
-  var g=productGroups().find(function(x){return x.key===key});if(!g)return;
-  document.getElementById("productDetailTitle").textContent=g.name;
-  document.getElementById("productDetailSub").textContent=(g.code?"Código "+g.code+" · ":"")+g.purchaseCount+" compra(s)";
-  document.getElementById("productDetailStats").innerHTML="<div class='stat-mini'><small>Preço médio</small><b>"+moneyBR(g.avgPrice)+"</b></div><div class='stat-mini'><small>Último</small><b>"+moneyBR(g.lastPrice)+"</b></div><div class='stat-mini'><small>Menor</small><b>"+moneyBR(g.minPrice)+"</b></div><div class='stat-mini'><small>Maior</small><b>"+moneyBR(g.maxPrice)+"</b></div><div class='stat-mini'><small>Quantidade acumulada</small><b>"+String(g.totalQty).replace(".",",")+"</b></div><div class='stat-mini'><small>Ocorrências</small><b>"+g.purchaseCount+"</b></div>";
+function nutritionValue(n,key){
+  var v=n?.[key+"_100g"];if(v===undefined||v===null||v==="")return null;
+  var num=Number(v);return Number.isFinite(num)?num:null;
+}
+function servingNutritionValue(n,key){
+  var v=n?.[key+"_serving"];if(v===undefined||v===null||v==="")return null;
+  var num=Number(v);return Number.isFinite(num)?num:null;
+}
+function renderNutrition(meta){
+  var host=document.getElementById("nutritionTable"),src=document.getElementById("nutritionSource");
+  var n=meta.nutriments||{},serving=meta.serving_size||"",rows=[
+    ["Valor energético","energy-kcal","kcal"],
+    ["Carboidratos","carbohydrates","g"],
+    ["Açúcares","sugars","g"],
+    ["Proteínas","proteins","g"],
+    ["Gorduras totais","fat","g"],
+    ["Gorduras saturadas","saturated-fat","g"],
+    ["Fibras","fiber","g"],
+    ["Sódio","sodium","g"],
+    ["Sal","salt","g"]
+  ];
+  var available=rows.filter(function(r){return nutritionValue(n,r[1])!=null||servingNutritionValue(n,r[1])!=null});
+  src.textContent=meta.source?("Fonte automática: "+meta.source+(serving?" · porção "+serving:"")):(meta.nutritionManual?"Informação preenchida manualmente":"");
+  if(!available.length){
+    host.innerHTML=meta.nutritionManual?"<div class='blockx'>"+esc(meta.nutritionManual).replace(/\n/g,"<br>")+"</div>":"<div class='meta'>Tabela nutricional ainda não identificada. Você pode complementar manualmente.</div>";
+    return;
+  }
+  var html="<table class='nutrition-table'><thead><tr><th>Nutriente</th><th>100 g/ml</th>"+(serving?"<th>Porção</th>":"")+"</tr></thead><tbody>";
+  available.forEach(function(r){
+    var v=nutritionValue(n,r[1]),sv=servingNutritionValue(n,r[1]);
+    html+="<tr><td>"+esc(r[0])+"</td><td>"+(v!=null?String(Number(v.toFixed(2))).replace(".",",")+" "+r[2]:"—")+"</td>"+(serving?"<td>"+(sv!=null?String(Number(sv.toFixed(2))).replace(".",",")+" "+r[2]:"—")+"</td>":"")+"</tr>";
+  });
+  html+="</tbody></table>";
+  if(meta.nutritionManual)html+="<div class='blockx' style='margin-top:8px'>"+esc(meta.nutritionManual).replace(/\n/g,"<br>")+"</div>";
+  host.innerHTML=html;
+}
+function renderProductPhotos(meta){
+  var host=document.getElementById("productPhotoGrid");host.innerHTML="";
+  var shown=0;
+  if(meta.autoImageUrl&&!meta.hideAutoImage){
+    var w=document.createElement("div");w.className="product-photo";var im=document.createElement("img");im.src=meta.autoImageUrl;im.alt="Foto identificada do produto";
+    var b=document.createElement("button");b.type="button";b.textContent="×";b.title="Ocultar foto automática";b.onclick=function(){meta.hideAutoImage=true;save();renderProductPhotos(meta)};
+    var tag=document.createElement("span");tag.className="auto-photo-label";tag.textContent="automática";
+    w.appendChild(im);w.appendChild(b);w.appendChild(tag);host.appendChild(w);shown++;
+  }
+  (meta.photos||[]).forEach(function(src,idx){
+    var w=document.createElement("div");w.className="product-photo";var im=document.createElement("img");im.src=src;im.alt="Foto do produto";
+    var b=document.createElement("button");b.type="button";b.textContent="×";b.onclick=function(){meta.photos.splice(idx,1);save();renderProductPhotos(meta)};
+    w.appendChild(im);w.appendChild(b);host.appendChild(w);shown++;
+  });
+  if(!shown)host.innerHTML="<div class='meta'>Nenhuma foto cadastrada.</div>";
+}
+function fillProductMetaFields(meta){
+  document.getElementById("productMetaName").value=meta.name||"";
+  document.getElementById("productMetaBrand").value=meta.brand||"";
+  document.getElementById("productMetaBarcode").value=meta.barcode||"";
+  document.getElementById("productMetaIngredients").value=meta.ingredients||"";
+  document.getElementById("productMetaComposition").value=meta.composition||"";
+  document.getElementById("productMetaNutritionManual").value=meta.nutritionManual||"";
+  renderProductPhotos(meta);renderNutrition(meta);
+}
+function renderProductHistory(group){
   var h=document.getElementById("productHistoryList");h.innerHTML="";
-  g.occurrences.forEach(function(o){
+  group.occurrences.forEach(function(o){
     var r=document.createElement("div");r.className="price-history-row";
     r.innerHTML="<div class='row'><div class='grow'><b style='font-size:12px'>"+esc(o.market)+"</b><div class='meta'>"+fmtDate(o.date)+" · Qtd. "+String(o.qty).replace(".",",")+(o.unit?" "+esc(o.unit):"")+(o.discount?" · desconto "+moneyBR(o.discount):"")+"</div></div><div style='text-align:right'><b>"+moneyBR(o.unitPrice)+"</b><div class='meta'>Total "+moneyBR(o.total)+"</div></div></div>";
     r.onclick=function(){document.getElementById("productDetailModal").classList.remove("on");openPurchasedItem(o.purchaseId,o.itemIndex)};h.appendChild(r);
   });
-  document.getElementById("productDetailModal").classList.add("on");
 }
+function refreshProductDetail(key){
+  key=resolveProductKey(key);editingProductKey=key;
+  var g=productGroups().find(function(x){return x.key===key});
+  if(!g)return;
+  var meta=productMetaForKey(key);
+  document.getElementById("productDetailTitle").textContent=meta.name||g.name;
+  document.getElementById("productDetailSub").textContent=(meta.brand?meta.brand+" · ":"")+(meta.barcode?"EAN "+meta.barcode+" · ":"")+g.purchaseCount+" compra(s)";
+  document.getElementById("productDetailStats").innerHTML="<div class='stat-mini'><small>Preço médio</small><b>"+moneyBR(g.avgPrice)+"</b></div><div class='stat-mini'><small>Último</small><b>"+moneyBR(g.lastPrice)+"</b></div><div class='stat-mini'><small>Menor</small><b>"+moneyBR(g.minPrice)+"</b></div><div class='stat-mini'><small>Maior</small><b>"+moneyBR(g.maxPrice)+"</b></div><div class='stat-mini'><small>Quantidade acumulada</small><b>"+String(g.totalQty).replace(".",",")+"</b></div><div class='stat-mini'><small>Ocorrências</small><b>"+g.purchaseCount+"</b></div>";
+  fillProductMetaFields(meta);renderProductHistory(g);
+  var st=document.getElementById("productRecognitionStatus");
+  if(meta.lookupMessage){st.textContent=meta.lookupMessage;st.className="banner "+(meta.lookupOk?"recognition-ok":"recognition-warn")}
+  else{st.textContent="Ainda não busquei dados externos deste produto.";st.className="banner"}
+}
+async function recognizeCurrentProduct(autoMode){
+  if(!editingProductKey)return;
+  var key=resolveProductKey(editingProductKey),g=productGroups().find(function(x){return x.key===key});if(!g)return;
+  var meta=productMetaForKey(key),btn=document.getElementById("recognizeProductBtn"),st=document.getElementById("productRecognitionStatus");
+  btn.disabled=true;btn.textContent="Reconhecendo produto…";st.textContent="Buscando foto, ingredientes e tabela nutricional…";st.className="banner";
+  try{
+    var barcode=meta.barcode||g.barcode||universalBarcode(g.code);
+    var r=await fetch(PRODUCT_API,{method:"POST",cache:"no-store",headers:{"content-type":"application/json"},body:JSON.stringify({barcode:barcode,name:meta.name||g.name})});
+    var data=await r.json().catch(function(){return{}});
+    if(!r.ok)throw Error(data.error||("HTTP "+r.status));
+    if(!data.found){
+      meta.lookupAttempted=true;meta.lookupOk=false;meta.lookupMessage="Não consegui reconhecer este produto com segurança. Você pode tirar/escolher fotos e preencher os dados manualmente.";
+      save();refreshProductDetail(key);return;
+    }
+
+    var canonical=universalBarcode(data.barcode)?("ean:"+universalBarcode(data.barcode)):key;
+    var oldMeta=meta;
+    if(canonical!==key){
+      state.productAliases=state.productAliases||{};state.productAliases[key]=canonical;
+      state.productMeta=state.productMeta||{};
+      meta=state.productMeta[canonical]||{photos:[]};
+      meta.photos=Array.isArray(meta.photos)?meta.photos:[];
+      Object.keys(oldMeta).forEach(function(k){if(meta[k]===undefined||meta[k]===null||meta[k]==="")meta[k]=oldMeta[k]});
+      state.productMeta[canonical]=meta;editingProductKey=canonical;key=canonical;
+    }
+
+    meta.name=data.name||meta.name||g.name;
+    meta.brand=data.brand||meta.brand||"";
+    meta.barcode=universalBarcode(data.barcode)||meta.barcode||barcode||"";
+    meta.ingredients=data.ingredients||meta.ingredients||"";
+    meta.composition=data.generic_name||data.categories||meta.composition||"";
+    meta.quantity=data.quantity||meta.quantity||"";
+    meta.serving_size=data.serving_size||meta.serving_size||"";
+    meta.nutriscore_grade=data.nutriscore_grade||meta.nutriscore_grade||"";
+    meta.autoImageUrl=data.image_front_url||meta.autoImageUrl||"";
+    meta.ingredientsImageUrl=data.image_ingredients_url||meta.ingredientsImageUrl||"";
+    meta.nutritionImageUrl=data.image_nutrition_url||meta.nutritionImageUrl||"";
+    meta.nutriments=data.nutriments||meta.nutriments||{};
+    meta.source=data.source||"Open Food Facts";
+    meta.lookupAttempted=true;meta.lookupOk=true;meta.lookupConfidence=data.confidence||0;meta.lookupType=data.match_type||"";
+    meta.lookupMessage=data.match_type==="barcode"?"Produto identificado pelo código de barras.":("Produto provavelmente identificado pelo nome ("+Math.round((Number(data.confidence)||0)*100)+"%). Confira os dados.");
+    meta.lookupAt=new Date().toISOString();
+    save();refreshProductDetail(key);
+  }catch(e){
+    meta.lookupAttempted=true;meta.lookupOk=false;meta.lookupMessage="Não consegui consultar a base de produtos agora: "+(e?.message||e)+". Você pode preencher manualmente.";
+    save();refreshProductDetail(key);
+  }finally{
+    btn.disabled=false;btn.textContent="Reconhecer / atualizar dados do produto";
+  }
+}
+function openProductDetail(key){
+  editingProductKey=resolveProductKey(key);
+  document.getElementById("productDetailModal").classList.add("on");
+  refreshProductDetail(editingProductKey);
+  var meta=productMetaForKey(editingProductKey);
+  if(!meta.lookupAttempted)setTimeout(function(){recognizeCurrentProduct(true)},50);
+}
+async function addProductPhotoFiles(files){
+  if(!editingProductKey)return;
+  var meta=productMetaForKey(editingProductKey);meta.photos=Array.isArray(meta.photos)?meta.photos:[];
+  var list=Array.from(files||[]);
+  for(var i=0;i<list.length&&meta.photos.length<3;i++)meta.photos.push(await optimizedImageDataUrl(list[i],1200,.8));
+  save();renderProductPhotos(meta);
+}
+document.getElementById("recognizeProductBtn").onclick=function(){recognizeCurrentProduct(false)};
+document.getElementById("productPhotoCamera").onchange=function(e){addProductPhotoFiles(e.target.files);this.value=""};
+document.getElementById("productPhotoLibrary").onchange=function(e){addProductPhotoFiles(e.target.files);this.value=""};
+document.getElementById("saveProductMetaBtn").onclick=function(){
+  if(!editingProductKey)return;
+  var key=resolveProductKey(editingProductKey),meta=productMetaForKey(key),newBarcode=universalBarcode(document.getElementById("productMetaBarcode").value);
+  meta.name=document.getElementById("productMetaName").value.trim();
+  meta.brand=document.getElementById("productMetaBrand").value.trim();
+  meta.barcode=newBarcode||document.getElementById("productMetaBarcode").value.trim();
+  meta.ingredients=document.getElementById("productMetaIngredients").value.trim();
+  meta.composition=document.getElementById("productMetaComposition").value.trim();
+  meta.nutritionManual=document.getElementById("productMetaNutritionManual").value.trim();
+  if(newBarcode&&key!=="ean:"+newBarcode){
+    var canonical="ean:"+newBarcode;state.productAliases[key]=canonical;
+    var existing=state.productMeta[canonical]||{photos:[]};
+    existing={...meta,...existing,photos:(existing.photos&&existing.photos.length?existing.photos:meta.photos||[])};
+    state.productMeta[canonical]=existing;editingProductKey=canonical;
+  }
+  save();refreshProductDetail(editingProductKey);toast("Informações do produto salvas.");
+};
+document.getElementById("productMetaNutritionManual").addEventListener("input",function(){if(editingProductKey){var m=productMetaForKey(editingProductKey);m.nutritionManual=this.value;renderNutrition(m)}});
+
 function renderStores(){
   var host=document.getElementById("storeList"),search=document.getElementById("storeSearch");if(!host)return;
   var q=norm(search?.value||""),groups=storeGroups();
@@ -663,7 +891,7 @@ function renderHistory(){
 document.getElementById("productSearch")?.addEventListener("input",renderProducts);
 document.getElementById("storeSearch")?.addEventListener("input",renderStores);
 document.getElementById("historySearch")?.addEventListener("input",renderHistory);
-document.getElementById("closeProductDetail").onclick=document.getElementById("closeProductDetailTop").onclick=function(){document.getElementById("productDetailModal").classList.remove("on")};
+document.getElementById("closeProductDetail").onclick=document.getElementById("closeProductDetailTop").onclick=function(){document.getElementById("productDetailModal").classList.remove("on");editingProductKey=null};
 document.getElementById("closeStoreDetail").onclick=document.getElementById("closeStoreDetailTop").onclick=function(){document.getElementById("storeDetailModal").classList.remove("on")};
 
 function createList(name){var l={id:uid(),name:name||"Nova lista",status:"open",items:[],purchases:[],createdAt:new Date().toISOString()};state.lists.unshift(l);state.current=l.id;save();return l}
