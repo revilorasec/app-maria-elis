@@ -132,6 +132,8 @@
 
 <script>
 (function(){
+var FISCAL_API="https://dumoqktblhultwxmckbd.supabase.co/functions/v1/mercado-fiscal-qr";
+var SUPABASE_ANON="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR1bW9xa3RibGh1bHR3eG1ja2JkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM4OTYzODQsImV4cCI6MjA5OTQ3MjM4NH0.7JXoeer17mPw9A4i6yJBTwTn0pBNL0FUkkBed9Y4qmg";
 var KEY="mercado_oliver_v3",qrZxingControls=null,qrZxingReader=null,qrScanDone=false,pendingReceipt=null,lastPage="home",creatingList=false;
 var reasons=["Não tinha","Qualidade ruim / feio","Preço alto","Troquei por outro","Desisti","Outro"];
 var state=load();
@@ -204,13 +206,34 @@ async function finishQrScan(raw){
   document.getElementById('qrText').value=text;
   pendingReceipt=pendingReceipt||{};
   pendingReceipt.qr=text;
-  document.getElementById('camMsg').textContent='QR Code reconhecido.';
+
   const controls=qrZxingControls;qrZxingControls=null;qrZxingReader=null;
   try{controls?.stop?.()}catch{}
-  const host=document.getElementById('qrReader');if(host)host.innerHTML='';
-  document.getElementById('qrScanModal')?.classList.remove('on');
-  toast('QR Code reconhecido.');
-  setTimeout(openLinkModal,180);
+  const host=document.getElementById('qrReader');
+  if(host)host.innerHTML='';
+  const status=document.getElementById('qrScanStatus');
+  status.textContent='QR reconhecido. Buscando supermercado, data e itens da nota…';
+  document.getElementById('camMsg').textContent='QR Code reconhecido. Consultando NFC-e…';
+
+  try{
+    const resolved=await resolveFiscalQr(text);
+    pendingReceipt.fiscal=resolved?.fiscal||{};
+    const f=pendingReceipt.fiscal;
+    const label=[f.establishment||f.trade_name||f.legal_name,f.date_time].filter(Boolean).join(' · ');
+    status.textContent=label?'Nota identificada: '+label:'QR lido. A consulta fiscal não trouxe todos os dados.';
+    document.getElementById('camMsg').textContent=label?'Nota identificada automaticamente.':'QR lido; alguns dados fiscais não foram encontrados.';
+    if(resolved?.warning)console.warn('Consulta NFC-e:',resolved.warning);
+  }catch(e){
+    console.error('Consulta fiscal',e);
+    pendingReceipt.fiscal={};
+    status.textContent='QR lido, mas a consulta da NFC-e não respondeu. Você ainda pode continuar manualmente.';
+    document.getElementById('camMsg').textContent='QR lido; consulta fiscal indisponível.';
+  }
+  setTimeout(()=>{
+    document.getElementById('qrScanModal')?.classList.remove('on');
+    toast('QR Code reconhecido.');
+    openLinkModal();
+  },220);
 }
 async function startQrScan(){
   const status=document.getElementById('qrScanStatus');
@@ -264,9 +287,21 @@ document.getElementById("qrClose").onclick=()=>stopQrScan();
 document.getElementById("continueReceipt").onclick=function(){var q=document.getElementById("qrText").value.trim();if(!q)return toast("Escaneie ou informe o QR primeiro.");pendingReceipt=pendingReceipt||{};pendingReceipt.qr=q;openLinkModal()};
 
 function openLinkModal(){
-  stopQrScan();var d=today();document.getElementById("purchaseDate").value=d;document.getElementById("marketName").value="";document.getElementById("purchaseName").value="Compra - "+fmtDate(d);var sel=document.getElementById("listLink");sel.innerHTML="<option value=''>Compra avulsa</option>";openLists().forEach(function(l){var o=document.createElement("option");o.value=l.id;o.textContent=l.name;sel.appendChild(o)});if(pendingReceipt&&pendingReceipt.startedFromList)sel.value=pendingReceipt.startedFromList;creatingList=false;document.getElementById("createListBox").classList.add("hidden");document.getElementById("linkModal").classList.add("on")
-}
-function suggestName(){var m=document.getElementById("marketName").value.trim()||"Compra",d=document.getElementById("purchaseDate").value;document.getElementById("purchaseName").value=m+" - "+fmtDate(d)}
+  stopQrScan().catch(()=>{});
+  var f=pendingReceipt?.fiscal||{};
+  var d=fiscalDateToInput(f.date_time)||today();
+  var market=String(f.establishment||f.trade_name||f.legal_name||"").trim();
+  document.getElementById("purchaseDate").value=d;
+  document.getElementById("marketName").value=market;
+  document.getElementById("purchaseName").value=(market||"Compra")+" - "+fmtDate(d);
+  var sel=document.getElementById("listLink");
+  sel.innerHTML="<option value=''>Compra avulsa</option>";
+  openLists().forEach(function(l){var o=document.createElement("option");o.value=l.id;o.textContent=l.name;sel.appendChild(o)});
+  if(pendingReceipt&&pendingReceipt.startedFromList)sel.value=pendingReceipt.startedFromList;
+  creatingList=false;
+  document.getElementById("createListBox").classList.add("hidden");
+  document.getElementById("linkModal").classList.add("on");
+}function suggestName(){var m=document.getElementById("marketName").value.trim()||"Compra",d=document.getElementById("purchaseDate").value;document.getElementById("purchaseName").value=m+" - "+fmtDate(d)}
 document.getElementById("marketName").addEventListener("input",suggestName);document.getElementById("purchaseDate").addEventListener("change",suggestName);
 document.getElementById("newListChoice").onclick=function(){creatingList=!creatingList;document.getElementById("createListBox").classList.toggle("hidden",!creatingList)};
 document.getElementById("cancelLink").onclick=function(){document.getElementById("linkModal").classList.remove("on")};
@@ -274,7 +309,21 @@ document.getElementById("confirmLink").onclick=function(){
   var link=document.getElementById("listLink").value;if(creatingList){var n=document.getElementById("newListFromReceipt").value.trim();if(!n)return toast("Digite o nome da nova lista.");link=createList(n).id}
   pendingReceipt=pendingReceipt||{};pendingReceipt.id=uid();pendingReceipt.market=document.getElementById("marketName").value.trim();pendingReceipt.date=document.getElementById("purchaseDate").value||today();pendingReceipt.name=document.getElementById("purchaseName").value.trim()||"Compra - "+fmtDate(pendingReceipt.date);pendingReceipt.listId=link||null;pendingReceipt.photos=[];pendingReceipt.items=[];pendingReceipt.recon=null;document.getElementById("linkModal").classList.remove("on");openDetail()
 };
-function openDetail(){document.getElementById("detailTitle").textContent=pendingReceipt.name;document.getElementById("detailMarket").value=pendingReceipt.market||"";document.getElementById("detailDate").value=pendingReceipt.date||today();document.getElementById("detailName").value=pendingReceipt.name||"";document.getElementById("receiptItems").value="";document.getElementById("recon").innerHTML="";renderPhotos();document.getElementById("detailModal").classList.add("on")}
+function openDetail(){
+  var f=pendingReceipt?.fiscal||{};
+  document.getElementById("detailTitle").textContent=pendingReceipt.name;
+  document.getElementById("detailMarket").value=pendingReceipt.market||"";
+  document.getElementById("detailDate").value=pendingReceipt.date||today();
+  document.getElementById("detailName").value=pendingReceipt.name||"";
+  document.getElementById("receiptItems").value=fiscalItemsText(f);
+  var info=[];
+  if(f.cnpj)info.push("CNPJ "+f.cnpj);
+  if(f.value!=null)info.push("Total R$ "+Number(f.value).toFixed(2).replace(".",","));
+  if(f.date_time)info.push(f.date_time);
+  document.getElementById("recon").innerHTML=info.length?"<div class='blockx'><b class='ok'>Dados identificados da NFC-e</b><div class='meta'>"+info.map(esc).join(" · ")+"</div></div>":"";
+  renderPhotos();
+  document.getElementById("detailModal").classList.add("on");
+}
 document.getElementById("cancelDetail").onclick=function(){document.getElementById("detailModal").classList.remove("on")};
 document.getElementById("receiptPhoto").onchange=function(e){var f=e.target.files&&e.target.files[0];if(!f)return;if((pendingReceipt.photos||[]).length>=3)return toast("Máximo de 3 fotos por nota.");var fr=new FileReader();fr.onload=function(){pendingReceipt.photos=pendingReceipt.photos||[];pendingReceipt.photos.push(fr.result);renderPhotos();toast("Foto adicionada.")};fr.readAsDataURL(f)};
 function renderPhotos(){var g=document.getElementById("photoGrid");g.innerHTML="";(pendingReceipt&&pendingReceipt.photos||[]).forEach(function(src){var i=document.createElement("img");i.src=src;g.appendChild(i)})}
