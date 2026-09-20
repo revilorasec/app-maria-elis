@@ -4,6 +4,12 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#146b43">
+<meta name="application-name" content="Mercado Oliver">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Mercado Oliver">
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="icon" href="./icon.svg" type="image/svg+xml">
 <title>Mercado Oliver</title>
 <style>
 :root{--g:#16734a;--gd:#0f4f34;--g2:#e8f5ee;--bg:#f5f7f6;--card:#fff;--ink:#142019;--muted:#718078;--line:#dfe7e2;--warn:#9a6500;--bad:#b43a3a;--blue:#315c9d}
@@ -27,12 +33,28 @@
 .fiscal-cell.wide{grid-column:1/-1}
 .tax-note{font-size:10px;color:#7a6100;background:#fff9df;border:1px solid #eadc9e;border-radius:10px;padding:8px;margin-top:8px;line-height:1.4}
 .ocr-status{font-size:11px;color:var(--muted);margin-top:8px}
-@media(max-width:520px){.fiscal-grid{grid-template-columns:1fr}}@media(max-width:560px){.hero-actions,.split{grid-template-columns:1fr}.kpis{grid-template-columns:repeat(3,1fr)}.row.mobile-stack>*{width:100%}}
+@media(max-width:520px){.fiscal-grid{grid-template-columns:1fr}}.app-tools{display:flex;gap:7px;align-items:center;flex-wrap:wrap;margin:-4px 0 12px}
+.app-version{font-size:11px;color:var(--muted);background:#eef3ef;border:1px solid var(--line);padding:6px 8px;border-radius:999px}
+.app-tools .btn{min-height:34px;padding:6px 9px;font-size:11px}
+.app-update{display:none;gap:10px;align-items:center;justify-content:space-between;background:#fff8d9;border:1px solid #ead67a;border-radius:14px;padding:10px 11px;margin:0 0 12px}
+.app-update.on{display:flex}
+.app-update b{display:block;font-size:12px}
+.app-update span{font-size:11px;color:#6f5c12}
+@media(max-width:560px){.hero-actions,.split{grid-template-columns:1fr}.kpis{grid-template-columns:repeat(3,1fr)}.row.mobile-stack>*{width:100%}.app-update{align-items:flex-start;flex-direction:column}.app-update .btn{width:100%}}
 </style>
 </head>
 <body>
 <div class="app">
-  <div class="top"><div class="logo">MO</div><div><b>Mercado Oliver</b><small>Teste publicado · uso real no celular</small></div></div>
+  <div class="top"><div class="logo">MO</div><div><b>Mercado Oliver</b><small>App de testes · atualizável no celular</small></div></div>
+<div class="app-tools">
+  <span id="versionLabel" class="app-version">v0.2.0</span>
+  <button id="installAppBtn" class="btn soft hidden">Instalar app</button>
+  <button id="checkUpdateBtn" class="btn">Verificar atualização</button>
+</div>
+<div id="appUpdate" class="app-update">
+  <div><b>Nova versão disponível</b><span id="updateText">Há uma atualização do Mercado Oliver pronta para instalar.</span></div>
+  <button id="updateNowBtn" class="btn primary">Atualizar agora</button>
+</div>
 
   <section id="home" class="page on">
     <div class="hero">
@@ -154,6 +176,7 @@
 
 <script>
 (function(){
+var APP_VERSION="0.2.0";
 var FISCAL_API="https://dumoqktblhultwxmckbd.supabase.co/functions/v1/mercado-fiscal-qr";
 var SUPABASE_ANON="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR1bW9xa3RibGh1bHR3eG1ja2JkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM4OTYzODQsImV4cCI6MjA5OTQ3MjM4NH0.7JXoeer17mPw9A4i6yJBTwTn0pBNL0FUkkBed9Y4qmg";
 var KEY="mercado_oliver_v3",qrZxingControls=null,qrZxingReader=null,qrScanDone=false,pendingReceipt=null,lastPage="home",creatingList=false;
@@ -546,7 +569,90 @@ document.getElementById("compare").onclick=function(){if(!pendingReceipt)return;
 function reconcilePreview(l,rec){var used={},matched=[];var candidates=l.items.filter(function(i){return (Number(i.boughtQty)||0)<(Number(i.qty)||1)&&!i.skipReason});candidates.forEach(function(li){var best=-1,bs=0;rec.forEach(function(r,i){if(used[i])return;var s=score(li.name,r.name);if(s>bs){bs=s;best=i}});if(best>=0&&bs>=.5){used[best]=1;matched.push({itemId:li.id,listName:li.name,planned:li.qty,already:li.boughtQty||0,rec:rec[best],score:bs})}});return{matched:matched,missing:candidates.filter(function(li){return !matched.some(function(m){return m.itemId===li.id})}),extra:rec.filter(function(r,i){return !used[i]})}}
 function showRecon(r){var w=document.getElementById("recon");function block(t,c,a,f){var h="<div class='blockx'><b class='"+c+"'>"+t+" ("+a.length+")</b>";a.forEach(function(x){h+="<div class='meta' style='margin-top:6px'>"+f(x)+"</div>"});return h+"</div>"}w.innerHTML=block("Da lista e encontrados","ok",r.matched,function(m){return esc(m.listName)+" ← "+esc(m.rec.name)+" · qtd "+m.rec.qty})+block("Ainda faltando","warn",r.missing,function(x){return esc(x.name)})+block("Comprados fora da lista","badtext",r.extra,function(x){return esc(x.name)+" · R$ "+x.total.toFixed(2).replace(".",",")})}
 document.getElementById("savePurchase").onclick=function(){if(!pendingReceipt)return;pendingReceipt.listId=document.getElementById("detailListLink").value||null;pendingReceipt.market=document.getElementById("detailMarket").value.trim();pendingReceipt.date=document.getElementById("detailDate").value||today();pendingReceipt.name=document.getElementById("detailName").value.trim()||pendingReceipt.name;pendingReceipt.items=parseItems(document.getElementById("receiptItems").value);var l=state.lists.find(function(x){return x.id===pendingReceipt.listId});if(l){pendingReceipt.listName=l.name;if(!pendingReceipt.recon)pendingReceipt.recon=reconcilePreview(l,pendingReceipt.items);pendingReceipt.recon.matched.forEach(function(m){var it=l.items.find(function(x){return x.id===m.itemId});if(it){it.boughtQty=(Number(it.boughtQty)||0)+(Number(m.rec.qty)||1);it.skipReason=""}});l.purchases=l.purchases||[];l.purchases.push(JSON.parse(JSON.stringify(pendingReceipt)));state.current=l.id}else{state.standalonePurchases=state.standalonePurchases||[];state.standalonePurchases.push(JSON.parse(JSON.stringify(pendingReceipt)))}save();document.getElementById("detailModal").classList.remove("on");document.getElementById("qrText").value="";pendingReceipt=null;if(l)page("list");else page("history");toast("Compra salva.")};
+
+var deferredInstallPrompt=null,swRegistration=null,remoteAppVersion=null;
+function standaloneMode(){return window.matchMedia?.("(display-mode: standalone)")?.matches||window.navigator.standalone===true}
+function showUpdate(version,notes){
+  remoteAppVersion=version||remoteAppVersion;
+  var bar=document.getElementById("appUpdate"),txt=document.getElementById("updateText");
+  if(txt)txt.textContent="Versão "+(version||"nova")+" disponível"+(notes?" · "+notes:"")+".";
+  bar?.classList.add("on");
+}
+async function registerMercadoPwa(){
+  var installBtn=document.getElementById("installAppBtn");
+  window.addEventListener("beforeinstallprompt",function(e){
+    e.preventDefault();deferredInstallPrompt=e;
+    if(!standaloneMode())installBtn?.classList.remove("hidden");
+  });
+  installBtn?.addEventListener("click",async function(){
+    if(deferredInstallPrompt){
+      deferredInstallPrompt.prompt();
+      try{await deferredInstallPrompt.userChoice}catch(e){}
+      deferredInstallPrompt=null;installBtn.classList.add("hidden");
+    }else{
+      toast("No navegador, use o menu e escolha “Adicionar à tela inicial” ou “Instalar app”.");
+    }
+  });
+  if(standaloneMode())installBtn?.classList.add("hidden");
+
+  if("serviceWorker" in navigator){
+    try{
+      swRegistration=await navigator.serviceWorker.register("./sw.js",{scope:"./"});
+      swRegistration.addEventListener("updatefound",function(){
+        var w=swRegistration.installing;if(!w)return;
+        w.addEventListener("statechange",function(){
+          if(w.state==="installed"&&navigator.serviceWorker.controller)showUpdate(remoteAppVersion||"nova","");
+        });
+      });
+      navigator.serviceWorker.addEventListener("controllerchange",function(){location.reload()});
+    }catch(e){console.warn("Service worker",e)}
+  }
+  await checkAppUpdate(false);
+}
+async function checkAppUpdate(manual){
+  var btn=document.getElementById("checkUpdateBtn");
+  if(btn){btn.disabled=true;btn.textContent="Verificando…"}
+  try{
+    var r=await fetch("./version.json?t="+Date.now(),{cache:"no-store"});
+    var v=await r.json();
+    remoteAppVersion=String(v.version||"");
+    if(remoteAppVersion&&remoteAppVersion!==APP_VERSION){
+      showUpdate(remoteAppVersion,String(v.notes||""));
+      try{await swRegistration?.update()}catch(e){}
+    }else if(manual){
+      toast("Você já está na versão mais recente: v"+APP_VERSION+".");
+    }
+  }catch(e){
+    console.warn("Verificação de versão",e);
+    if(manual)toast("Não consegui verificar atualização agora.");
+  }finally{
+    if(btn){btn.disabled=false;btn.textContent="Verificar atualização"}
+  }
+}
+document.getElementById("checkUpdateBtn")?.addEventListener("click",function(){checkAppUpdate(true)});
+document.getElementById("updateNowBtn")?.addEventListener("click",async function(){
+  var b=this;b.disabled=true;b.textContent="Atualizando…";
+  try{
+    if(swRegistration?.waiting){
+      swRegistration.waiting.postMessage({type:"SKIP_WAITING"});
+      return;
+    }
+    try{await swRegistration?.update()}catch(e){}
+    setTimeout(function(){
+      var v=remoteAppVersion||Date.now();
+      location.replace("./index.html?v="+encodeURIComponent(v)+"&t="+Date.now());
+    },500);
+  }catch(e){
+    b.disabled=false;b.textContent="Atualizar agora";
+    toast("Não consegui atualizar automaticamente. Feche e abra o app novamente.");
+  }
+});
+document.addEventListener("visibilitychange",function(){if(document.visibilityState==="visible")checkAppUpdate(false)});
+setInterval(function(){checkAppUpdate(false)},5*60*1000);
+
 window.addEventListener("beforeunload",()=>{stopQrScan().catch(()=>{})});render();loadZxingScanner().catch(()=>{});
+registerMercadoPwa();
+
 })();
 </script>
 </body></html>
