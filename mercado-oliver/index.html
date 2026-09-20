@@ -96,7 +96,7 @@
     <p>Aponte a câmera para o QR Code. A leitura acontece automaticamente, sem tirar foto.</p>
     <div id="qrReader" class="qr-reader"></div>
     <div id="qrScanStatus" class="qr-scan-status"></div>
-    <div class="qr-scan-actions"><button id="qrClose" class="btn">Cancelar</button></div>
+    <div class="qr-scan-actions"><button id="qrSwitch" class="btn">Trocar leitor</button><button id="qrClose" class="btn">Cancelar</button></div>
   </div>
 </div>
 
@@ -156,7 +156,7 @@
 (function(){
 var FISCAL_API="https://dumoqktblhultwxmckbd.supabase.co/functions/v1/mercado-fiscal-qr";
 var SUPABASE_ANON="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR1bW9xa3RibGh1bHR3eG1ja2JkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM4OTYzODQsImV4cCI6MjA5OTQ3MjM4NH0.7JXoeer17mPw9A4i6yJBTwTn0pBNL0FUkkBed9Y4qmg";
-var KEY="mercado_oliver_v3",qrZxingControls=null,qrZxingReader=null,qrScanDone=false,pendingReceipt=null,lastPage="home",creatingList=false;
+var KEY="mercado_oliver_v3",qrZxingControls=null,qrZxingReader=null,qrScanner=null,qrNativeStream=null,qrNativeVideo=null,qrNativeTimer=null,qrFallbackTimer=null,qrScanEngine="",qrScanDone=false,pendingReceipt=null,lastPage="home",creatingList=false;
 var reasons=["Não tinha","Qualidade ruim / feio","Preço alto","Troquei por outro","Desisti","Outro"];
 var state=load();
 function blank(){return {lists:[],current:null,standalonePurchases:[]}}
@@ -199,6 +199,20 @@ document.getElementById("scanForList").onclick=function(){var l=cur();pendingRec
 document.getElementById("closeList").onclick=function(){var l=cur();if(!l)return;l.status="closed";l.closedAt=new Date().toISOString();save();page("home");toast("Lista encerrada.")};
 document.querySelectorAll(".nav button").forEach(function(b){b.onclick=function(){if(b.dataset.p==="list"&&!cur())return toast("Abra uma lista primeiro.");page(b.dataset.p)}});
 
+async function loadHtml5Scanner(){
+  if(window.Html5Qrcode)return window.Html5Qrcode;
+  if(window.__html5QrLoading)return window.__html5QrLoading;
+  window.__html5QrLoading=new Promise(function(res,rej){
+    var s=document.createElement('script');
+    s.src='https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js';
+    s.async=true;
+    var tm=setTimeout(function(){rej(Error('HTML5_QR_LOAD_TIMEOUT'))},10000);
+    s.onload=function(){clearTimeout(tm);window.Html5Qrcode?res(window.Html5Qrcode):rej(Error('HTML5_QR_NOT_LOADED'))};
+    s.onerror=function(){clearTimeout(tm);rej(Error('HTML5_QR_LOAD_FAILED'))};
+    document.head.appendChild(s);
+  }).finally(function(){window.__html5QrLoading=null});
+  return window.__html5QrLoading;
+}
 async function loadZxingScanner(){
   if(window.ZXingBrowser?.BrowserQRCodeReader)return window.ZXingBrowser;
   if(window.__zxingQrLoading)return window.__zxingQrLoading;
@@ -215,21 +229,51 @@ async function loadZxingScanner(){
 }
 async function stopQrScan(){
   qrScanDone=true;
+  qrScanEngine='';
+  if(qrFallbackTimer){clearTimeout(qrFallbackTimer);qrFallbackTimer=null}
+  if(qrNativeTimer){clearTimeout(qrNativeTimer);qrNativeTimer=null}
   if(qrZxingControls){try{await Promise.resolve(qrZxingControls.stop())}catch{}qrZxingControls=null}
   qrZxingReader=null;
-  const host=document.getElementById('qrReader');if(host)host.innerHTML='';
+  if(qrNativeVideo){try{qrNativeVideo.pause();qrNativeVideo.srcObject=null}catch{}qrNativeVideo=null}
+  if(qrNativeStream){try{qrNativeStream.getTracks().forEach(function(t){t.stop()})}catch{}qrNativeStream=null}
+  if(qrScanner){
+    var scanner=qrScanner;qrScanner=null;
+    try{await scanner.stop().catch(function(){})}catch{}
+    try{await scanner.clear().catch(function(){})}catch{}
+  }
+  var host=document.getElementById('qrReader');if(host)host.innerHTML='';
   document.getElementById('qrScanModal')?.classList.remove('on');
+}
+function qrLooksValid(raw){
+  var s=String(raw||'').trim();
+  if(!s)return false;
+  if(/\d{44}/.test(s))return true;
+  try{var u=new URL(s);return /^https?:$/.test(u.protocol)}catch(e){return s.length>20}
+}
+function localFiscalFromQr(raw){
+  var s=String(raw||''),key=null,m=s.match(/(?:^|\D)(\d{44})(?:\D|$)/);
+  if(m)key=m[1];
+  if(!key){try{var u=new URL(s),p=u.searchParams.get('p')||u.searchParams.get('chNFe')||u.searchParams.get('chave')||'',x=p.match(/\d{44}/);if(x)key=x[0]}catch(e){}}
+  if(!key)return {official_query_url:s,qr_used:true};
+  return {
+    access_key:key,uf_code:key.slice(0,2),year_month:'20'+key.slice(2,4)+'-'+key.slice(4,6),
+    cnpj:key.slice(6,20),model:key.slice(20,22),series:String(Number(key.slice(22,25))),
+    number:String(Number(key.slice(25,34))),emission_type:key.slice(34,35),
+    numeric_code:key.slice(35,43),check_digit:key.slice(43,44),
+    official_query_url:s,qr_used:true
+  };
 }
 async function finishQrScan(raw){
   if(qrScanDone)return;
   const text=String(raw||'').trim();
-  if(!text)return;
+  if(!text||!qrLooksValid(text))return;
   qrScanDone=true;
 
+  var local=localFiscalFromQr(text);
   pendingReceipt=pendingReceipt||{};
   pendingReceipt.id=pendingReceipt.id||uid();
   pendingReceipt.qr=text;
-  pendingReceipt.fiscal=pendingReceipt.fiscal||{};
+  pendingReceipt.fiscal={...(pendingReceipt.fiscal||{}),...local};
   pendingReceipt.fiscalLoading=true;
   pendingReceipt.date=pendingReceipt.date||today();
   pendingReceipt.market=pendingReceipt.market||"";
@@ -240,14 +284,11 @@ async function finishQrScan(raw){
   pendingReceipt.recon=null;
 
   document.getElementById('qrText').value=text;
-  document.getElementById('camMsg').textContent='QR reconhecido. Buscando dados da nota…';
+  document.getElementById('camMsg').textContent='QR reconhecido.';
 
-  const controls=qrZxingControls;qrZxingControls=null;qrZxingReader=null;
-  try{controls?.stop?.()}catch{}
-  const host=document.getElementById('qrReader');if(host)host.innerHTML='';
-  document.getElementById('qrScanModal')?.classList.remove('on');
-
+  await stopQrScan();
   openDetail();
+  renderFiscalDetails();
   toast('QR reconhecido. Buscando dados da nota…');
   resolveFiscalInBackground(text);
 }
@@ -257,7 +298,7 @@ async function resolveFiscalInBackground(text){
   try{
     const resolved=await resolveFiscalQr(text);
     if(!pendingReceipt||pendingReceipt.qr!==text)return;
-    pendingReceipt.fiscal=resolved?.fiscal||{};
+    pendingReceipt.fiscal={...(pendingReceipt.fiscal||{}),...Object.fromEntries(Object.entries(resolved?.fiscal||{}).filter(function(e){return e[1]!==null&&e[1]!==undefined&&e[1]!==""}))};
     pendingReceipt.fiscalLoading=false;
     applyFiscalToOpenScreens();
     var f=pendingReceipt.fiscal||{};
@@ -300,54 +341,110 @@ function applyFiscalToOpenScreens(){
   }
   renderFiscalDetails();
 }
+async function startNativeQrScan(){
+  if(!('BarcodeDetector' in window)||!navigator.mediaDevices?.getUserMedia)throw Error('NATIVE_UNAVAILABLE');
+  var formats=[];try{formats=await BarcodeDetector.getSupportedFormats?.()||[]}catch{}
+  if(formats.length&&!formats.includes('qr_code'))throw Error('NATIVE_UNAVAILABLE');
+  var detector=new BarcodeDetector({formats:['qr_code']});
+  qrNativeStream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:'environment'},width:{ideal:1920},height:{ideal:1080}}});
+  var host=document.getElementById('qrReader');host.innerHTML='<div class="qr-video-wrap"><video id="qrNativeVideo" playsinline muted autoplay></video><i class="qr-guide"></i></div>';
+  var video=document.getElementById('qrNativeVideo');qrNativeVideo=video;video.srcObject=qrNativeStream;await video.play();
+  var track=qrNativeStream.getVideoTracks()[0];
+  try{var caps=track.getCapabilities?.()||{};if(Array.isArray(caps.focusMode)&&caps.focusMode.includes('continuous'))await track.applyConstraints({advanced:[{focusMode:'continuous'}]})}catch{}
+  var tick=async function(){
+    if(qrScanDone||qrScanEngine!=='native'||!qrNativeVideo)return;
+    try{
+      if(video.readyState>=2){
+        var codes=await detector.detect(video);
+        var code=(codes||[]).find(function(x){return qrLooksValid(x.rawValue)})||(codes||[])[0];
+        if(code?.rawValue){await finishQrScan(code.rawValue);return}
+      }
+    }catch(e){}
+    qrNativeTimer=setTimeout(tick,70);
+  };
+  tick();
+}
+async function startZxingQrScan(){
+  qrScanEngine='zxing';
+  var ZX=await loadZxingScanner(),host=document.getElementById('qrReader');
+  host.innerHTML='<div class="qr-video-wrap"><video id="qrZxingVideo" playsinline muted autoplay></video><i class="qr-guide"></i></div>';
+  var video=document.getElementById('qrZxingVideo');
+  qrZxingReader=new ZX.BrowserMultiFormatReader();
+  var controlsRef=null;
+  var controls=await qrZxingReader.decodeFromConstraints({audio:false,video:{facingMode:{ideal:'environment'}}},video,function(result,error,ctrl){
+    if(!result||qrScanDone)return;
+    controlsRef=ctrl||controlsRef;qrZxingControls=controlsRef||qrZxingControls;
+    var text=typeof result.getText==='function'?result.getText():(result.text||String(result));
+    if(qrLooksValid(text))finishQrScan(text).catch(console.error);
+  });
+  controlsRef=controls;if(qrScanDone){try{controls.stop()}catch{}return}
+  qrZxingControls=controls;
+  var track=video.srcObject?.getVideoTracks?.()[0];
+  try{var caps=track?.getCapabilities?.()||{};if(Array.isArray(caps.focusMode)&&caps.focusMode.includes('continuous'))await track.applyConstraints({advanced:[{focusMode:'continuous'}]})}catch{}
+}
+async function startHtml5QrScan(){
+  qrScanEngine='html5';
+  await loadHtml5Scanner();
+  var cfg=window.Html5QrcodeSupportedFormats?{formatsToSupport:[Html5QrcodeSupportedFormats.QR_CODE],verbose:false,experimentalFeatures:{useBarCodeDetectorIfSupported:false}}:{verbose:false,experimentalFeatures:{useBarCodeDetectorIfSupported:false}};
+  qrScanner=new Html5Qrcode('qrReader',cfg);
+  await qrScanner.start({facingMode:{ideal:'environment'}},{fps:20,qrbox:function(w,h){var side=Math.floor(Math.min(w,h)*.90);return{width:side,height:side}},disableFlip:false},function(text){if(qrLooksValid(text))finishQrScan(text).catch(console.error)},function(){});
+}
+async function clearCurrentEngine(){
+  if(qrFallbackTimer){clearTimeout(qrFallbackTimer);qrFallbackTimer=null}
+  if(qrNativeTimer){clearTimeout(qrNativeTimer);qrNativeTimer=null}
+  if(qrZxingControls){try{await Promise.resolve(qrZxingControls.stop())}catch{}qrZxingControls=null}
+  qrZxingReader=null;
+  if(qrNativeVideo){try{qrNativeVideo.pause();qrNativeVideo.srcObject=null}catch{}qrNativeVideo=null}
+  if(qrNativeStream){try{qrNativeStream.getTracks().forEach(function(t){t.stop()})}catch{}qrNativeStream=null}
+  if(qrScanner){var s=qrScanner;qrScanner=null;try{await s.stop().catch(function(){})}catch{}try{await s.clear().catch(function(){})}catch{}}
+  var host=document.getElementById('qrReader');if(host)host.innerHTML='';
+}
+async function switchQrEngine(){
+  if(qrScanDone)return;
+  var status=document.getElementById('qrScanStatus');
+  var current=qrScanEngine;
+  await clearCurrentEngine();
+  try{
+    if(current==='native'){
+      status.textContent='Ajustando o leitor…';
+      await startZxingQrScan();
+      status.textContent='Leitor alternativo ativo. Aponte para o QR.';
+      qrFallbackTimer=setTimeout(function(){if(!qrScanDone)switchQrEngine().catch(console.error)},4500);
+    }else{
+      status.textContent='Ajustando o leitor…';
+      await startHtml5QrScan();
+      status.textContent='Leitor de alta compatibilidade ativo. Mantenha o QR dentro do quadro.';
+    }
+  }catch(e){
+    status.textContent='Não foi possível trocar o leitor: '+(e?.message||e);
+  }
+}
 async function startQrScan(){
-  const status=document.getElementById('qrScanStatus');
-  const msg=document.getElementById('camMsg');
+  var status=document.getElementById('qrScanStatus'),msg=document.getElementById('camMsg');
   try{
     await stopQrScan();
     qrScanDone=false;
     document.getElementById('qrScanModal').classList.add('on');
-    status.textContent='Abrindo scanner…';
-    msg.textContent='';
-    const ZX=await loadZxingScanner();
-    const host=document.getElementById('qrReader');
-    host.innerHTML='<div class="qr-video-wrap"><video id="qrZxingVideo" playsinline muted autoplay></video><i class="qr-guide"></i></div>';
-    const video=document.getElementById('qrZxingVideo');
-    qrZxingReader=new ZX.BrowserMultiFormatReader();
-    let controlsRef=null;
-    const controls=await qrZxingReader.decodeFromConstraints(
-      {audio:false,video:{facingMode:{ideal:'environment'}}},
-      video,
-      (result,error,ctrl)=>{
-        if(!result||qrScanDone)return;
-        controlsRef=ctrl||controlsRef;
-        qrZxingControls=controlsRef||qrZxingControls;
-        const text=typeof result.getText==='function'?result.getText():(result.text||String(result));
-        finishQrScan(text).catch(e=>{
-          console.error('Conclusão do QR',e);
-          status.textContent='O QR foi reconhecido, mas ocorreu um erro ao concluir a leitura.';
-        });
-      }
-    );
-    controlsRef=controls;
-    if(qrScanDone){try{controls.stop()}catch{}return}
-    qrZxingControls=controls;
-    const track=video.srcObject?.getVideoTracks?.()[0];
-    const settings=track?.getSettings?.()||{};
+    status.textContent='Abrindo câmera…';msg.textContent='';
     try{
-      const caps=track?.getCapabilities?.()||{};
-      if(Array.isArray(caps.focusMode)&&caps.focusMode.includes('continuous')){
-        await track.applyConstraints({advanced:[{focusMode:'continuous'}]});
-      }
-    }catch{}
-    status.textContent='Scanner ativo'+(settings.width&&settings.height?' · '+settings.width+'×'+settings.height:'')+' · mantenha o QR dentro da moldura.';
+      qrScanEngine='native';
+      await startNativeQrScan();
+      status.textContent='Leitor ativo. Aponte para o QR Code.';
+      qrFallbackTimer=setTimeout(function(){if(!qrScanDone)switchQrEngine().catch(console.error)},3200);
+    }catch(nativeErr){
+      await clearCurrentEngine();
+      await startZxingQrScan();
+      status.textContent='Leitor ativo. Aponte para o QR Code.';
+      qrFallbackTimer=setTimeout(function(){if(!qrScanDone)switchQrEngine().catch(console.error)},4500);
+    }
   }catch(e){
-    console.error('Scanner ZXing',e);
+    console.error('Scanner QR',e);
     await stopQrScan();
     msg.textContent='Não foi possível abrir o leitor: '+(e?.message||e);
   }
 }
 document.getElementById("scan").onclick=startQrScan;
+document.getElementById("qrSwitch").onclick=function(){switchQrEngine().catch(console.error)};
 document.getElementById("qrClose").onclick=()=>stopQrScan();
 document.getElementById("continueReceipt").onclick=function(){var q=document.getElementById("qrText").value.trim();if(q)finishQrScan(q)};
 
@@ -388,6 +485,8 @@ function renderFiscalDetails(){
   add("Estabelecimento",f.establishment||f.trade_name||f.legal_name,true);
   add("Razão social",f.legal_name,true);
   add("CNPJ",f.cnpj?formatDoc(f.cnpj):"");
+  add("UF da chave",f.uf_code||"");
+  add("Emissão (chave)",f.year_month||"");
   add("Data e hora",f.date_time||"");
   add("NFC-e",f.number||"");
   add("Série",f.series||"");
