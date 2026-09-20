@@ -79,10 +79,9 @@
       <button id="scan" class="btn primary block" style="margin-top:10px">▣ Abrir leitor QR</button>
       <div id="camMsg" class="meta" style="margin-top:8px"></div>
     </div>
-    <div class="sec card">
-      <h2>QR lido</h2>
-      <textarea id="qrText" class="field" rows="3" placeholder="O conteúdo/URL do QR aparecerá aqui"></textarea>
-      <button id="continueReceipt" class="btn primary block" style="margin-top:8px">Continuar com esta nota</button>
+    <div class="hidden" aria-hidden="true">
+      <textarea id="qrText"></textarea>
+      <button id="continueReceipt" type="button"></button>
     </div>
   </section>
 
@@ -101,7 +100,7 @@
   </div>
 </div>
 
-<div id="linkModal" class="modal"><div class="sheet">
+<div id="linkModal" class="modal hidden" aria-hidden="true"><div class="sheet">
   <h2>Vincular esta compra</h2>
   <div class="meta">A mesma lista pode receber várias notas de mercados diferentes.</div>
   <div id="fiscalLookupStatus" class="meta" style="margin-top:6px"></div>
@@ -121,6 +120,15 @@
 
 <div id="detailModal" class="modal"><div class="sheet">
   <h2 id="detailTitle">Detalhes da compra</h2>
+  <div id="detailLookupStatus" class="banner">QR reconhecido. Buscando dados da nota…</div>
+  <div style="height:10px"></div>
+  <label class="meta">Esta compra faz parte de qual lista?</label>
+  <select id="detailListLink" class="field"><option value="">Compra avulsa</option></select>
+  <div id="detailNewListBox" class="hidden" style="margin-top:8px">
+    <div class="row mobile-stack"><input id="detailNewListName" class="field grow" placeholder="Nome da nova lista"><button id="createDetailList" class="btn primary">Criar e vincular</button></div>
+  </div>
+  <button id="detailNewListChoice" class="btn soft" style="margin-top:8px">＋ Criar nova lista</button>
+  <div class="separator"></div>
   <div class="split"><div><label class="meta">Supermercado</label><input id="detailMarket" class="field"></div><div><label class="meta">Data</label><input id="detailDate" class="field" type="date"></div></div>
   <div style="height:8px"></div><label class="meta">Nome da compra</label><input id="detailName" class="field">
   <div class="separator"></div>
@@ -217,25 +225,35 @@ async function finishQrScan(raw){
   const text=String(raw||'').trim();
   if(!text)return;
   qrScanDone=true;
-  document.getElementById('qrText').value=text;
+
   pendingReceipt=pendingReceipt||{};
+  pendingReceipt.id=pendingReceipt.id||uid();
   pendingReceipt.qr=text;
   pendingReceipt.fiscal=pendingReceipt.fiscal||{};
   pendingReceipt.fiscalLoading=true;
+  pendingReceipt.date=pendingReceipt.date||today();
+  pendingReceipt.market=pendingReceipt.market||"";
+  pendingReceipt.name=pendingReceipt.name||("Compra - "+fmtDate(pendingReceipt.date));
+  pendingReceipt.listId=pendingReceipt.startedFromList||pendingReceipt.listId||null;
+  pendingReceipt.photos=pendingReceipt.photos||[];
+  pendingReceipt.items=pendingReceipt.items||[];
+  pendingReceipt.recon=null;
 
-  document.getElementById('camMsg').textContent='QR Code reconhecido.';
+  document.getElementById('qrText').value=text;
+  document.getElementById('camMsg').textContent='QR reconhecido. Buscando dados da nota…';
+
   const controls=qrZxingControls;qrZxingControls=null;qrZxingReader=null;
   try{controls?.stop?.()}catch{}
   const host=document.getElementById('qrReader');if(host)host.innerHTML='';
   document.getElementById('qrScanModal')?.classList.remove('on');
-  toast('QR Code reconhecido.');
-  openLinkModal();
 
+  openDetail();
+  toast('QR reconhecido. Buscando dados da nota…');
   resolveFiscalInBackground(text);
 }
 async function resolveFiscalInBackground(text){
-  var st=document.getElementById('fiscalLookupStatus');
-  if(st)st.textContent='Consultando supermercado, data, itens e tributos da NFC-e…';
+  var st=document.getElementById('detailLookupStatus');
+  if(st){st.textContent='QR reconhecido. Buscando supermercado, data, itens, valores e tributos…';st.className='banner'}
   try{
     const resolved=await resolveFiscalQr(text);
     if(!pendingReceipt||pendingReceipt.qr!==text)return;
@@ -243,16 +261,17 @@ async function resolveFiscalInBackground(text){
     pendingReceipt.fiscalLoading=false;
     applyFiscalToOpenScreens();
     var f=pendingReceipt.fiscal||{};
-    var label=[f.establishment||f.trade_name||f.legal_name,f.date_time].filter(Boolean).join(' · ');
-    if(st)st.textContent=label?'NFC-e identificada: '+label:'QR lido; alguns dados fiscais não foram encontrados.';
-    document.getElementById('camMsg').textContent=label?'Nota identificada automaticamente.':'QR lido; alguns dados fiscais não foram encontrados.';
+    var market=f.establishment||f.trade_name||f.legal_name||'';
+    var parts=[market,f.date_time,f.value!=null?moneyBR(f.value):''].filter(Boolean);
+    if(st){st.textContent=parts.length?'Nota identificada: '+parts.join(' · '):'Nota reconhecida. Confira os dados encontrados.';st.className='banner'}
+    document.getElementById('camMsg').textContent='Nota fiscal reconhecida.';
     if(resolved?.warning)console.warn('Consulta NFC-e:',resolved.warning);
   }catch(err){
     console.error('Consulta fiscal',err);
     if(!pendingReceipt||pendingReceipt.qr!==text)return;
     pendingReceipt.fiscalLoading=false;
-    if(st)st.textContent='QR lido. A consulta fiscal não respondeu; você pode continuar e tentar novamente depois.';
-    document.getElementById('camMsg').textContent='QR lido; consulta fiscal indisponível.';
+    if(st){st.textContent='QR reconhecido, mas a consulta fiscal não respondeu. Os dados que puderem ser obtidos localmente foram mantidos.';st.className='banner'}
+    document.getElementById('camMsg').textContent='QR reconhecido; consulta fiscal indisponível.';
   }
 }
 function applyFiscalToOpenScreens(){
@@ -260,18 +279,26 @@ function applyFiscalToOpenScreens(){
   var f=pendingReceipt.fiscal||{};
   var market=String(f.establishment||f.trade_name||f.legal_name||'').trim();
   var d=fiscalDateToInput(f.date_time)||'';
-  var marketEl=document.getElementById('marketName'),dateEl=document.getElementById('purchaseDate'),nameEl=document.getElementById('purchaseName');
-  if(document.getElementById('linkModal')?.classList.contains('on')){
-    if(market && (!marketEl.value || marketEl.dataset.auto==='1')){marketEl.value=market;marketEl.dataset.auto='1'}
-    if(d && (!dateEl.value || dateEl.dataset.auto==='1')){dateEl.value=d;dateEl.dataset.auto='1'}
-    if((market||d) && (!nameEl.value || nameEl.dataset.auto==='1')){nameEl.value=(market||'Compra')+' - '+fmtDate(d||dateEl.value||today());nameEl.dataset.auto='1'}
+  var marketEl=document.getElementById('detailMarket');
+  var dateEl=document.getElementById('detailDate');
+  var nameEl=document.getElementById('detailName');
+  var itemsEl=document.getElementById('receiptItems');
+
+  if(market && (!marketEl.value || marketEl.dataset.auto==='1')){
+    marketEl.value=market; marketEl.dataset.auto='1'; pendingReceipt.market=market;
   }
-  if(document.getElementById('detailModal')?.classList.contains('on')){
-    if(market)document.getElementById('detailMarket').value=market;
-    if(d)document.getElementById('detailDate').value=d;
-    var txt=fiscalItemsText(f);if(txt)document.getElementById('receiptItems').value=txt;
-    renderFiscalDetails();
+  if(d && (!dateEl.value || dateEl.dataset.auto==='1')){
+    dateEl.value=d; dateEl.dataset.auto='1'; pendingReceipt.date=d;
   }
+  if((market||d) && (!nameEl.value || nameEl.dataset.auto==='1')){
+    var generated=(market||pendingReceipt.market||'Compra')+' - '+fmtDate(d||pendingReceipt.date||today());
+    nameEl.value=generated; nameEl.dataset.auto='1'; pendingReceipt.name=generated;
+  }
+  var txt=fiscalItemsText(f);
+  if(txt && (!itemsEl.value || itemsEl.dataset.auto==='1')){
+    itemsEl.value=txt; itemsEl.dataset.auto='1';
+  }
+  renderFiscalDetails();
 }
 async function startQrScan(){
   const status=document.getElementById('qrScanStatus');
@@ -322,7 +349,7 @@ async function startQrScan(){
 }
 document.getElementById("scan").onclick=startQrScan;
 document.getElementById("qrClose").onclick=()=>stopQrScan();
-document.getElementById("continueReceipt").onclick=function(){var q=document.getElementById("qrText").value.trim();if(!q)return toast("Escaneie ou informe o QR primeiro.");pendingReceipt=pendingReceipt||{};pendingReceipt.qr=q;openLinkModal()};
+document.getElementById("continueReceipt").onclick=function(){var q=document.getElementById("qrText").value.trim();if(q)finishQrScan(q)};
 
 function openLinkModal(){
   var f=pendingReceipt?.fiscal||{};
@@ -408,20 +435,46 @@ async function ocrReceiptPhoto(file){
     renderFiscalDetails();
   }catch(e){console.warn("OCR nota",e);st.textContent="Foto salva. A leitura automática da foto não conseguiu concluir."}
 }
+function populateDetailListSelector(){
+  var sel=document.getElementById("detailListLink");
+  if(!sel)return;
+  sel.innerHTML="<option value=''>Compra avulsa</option>";
+  openLists().forEach(function(l){var o=document.createElement("option");o.value=l.id;o.textContent=l.name;sel.appendChild(o)});
+  sel.value=pendingReceipt?.listId||"";
+}
 function openDetail(){
   var f=pendingReceipt?.fiscal||{};
-  document.getElementById("detailTitle").textContent=pendingReceipt.name;
-  document.getElementById("detailMarket").value=pendingReceipt.market||"";
-  document.getElementById("detailDate").value=pendingReceipt.date||today();
-  document.getElementById("detailName").value=pendingReceipt.name||"";
-  document.getElementById("receiptItems").value=fiscalItemsText(f);
+  document.getElementById("detailTitle").textContent=pendingReceipt.name||"Detalhes da compra";
+  var marketEl=document.getElementById("detailMarket"),dateEl=document.getElementById("detailDate"),nameEl=document.getElementById("detailName"),itemsEl=document.getElementById("receiptItems");
+  marketEl.value=pendingReceipt.market||""; marketEl.dataset.auto="1";
+  dateEl.value=pendingReceipt.date||today(); dateEl.dataset.auto="1";
+  nameEl.value=pendingReceipt.name||("Compra - "+fmtDate(pendingReceipt.date||today())); nameEl.dataset.auto="1";
+  itemsEl.value=fiscalItemsText(f); itemsEl.dataset.auto="1";
   document.getElementById("recon").innerHTML="";
   document.getElementById("photoOcrStatus").textContent="";
+  document.getElementById("detailLookupStatus").textContent=pendingReceipt.fiscalLoading?"QR reconhecido. Buscando dados da nota…":"Confira os dados da compra.";
+  populateDetailListSelector();
   renderFiscalDetails();
   renderPhotos();
   document.getElementById("detailModal").classList.add("on");
 }
 document.getElementById("cancelDetail").onclick=function(){document.getElementById("detailModal").classList.remove("on")};
+document.getElementById("detailListLink").onchange=function(){if(pendingReceipt)pendingReceipt.listId=this.value||null};
+document.getElementById("detailNewListChoice").onclick=function(){document.getElementById("detailNewListBox").classList.toggle("hidden")};
+document.getElementById("createDetailList").onclick=function(){
+  var n=document.getElementById("detailNewListName").value.trim();
+  if(!n)return toast("Digite o nome da nova lista.");
+  var l=createList(n);
+  if(pendingReceipt){pendingReceipt.listId=l.id;pendingReceipt.startedFromList=l.id}
+  populateDetailListSelector();
+  document.getElementById("detailNewListName").value="";
+  document.getElementById("detailNewListBox").classList.add("hidden");
+  toast("Lista criada e vinculada.");
+};
+document.getElementById("detailMarket").addEventListener("input",function(){this.dataset.auto="0";if(pendingReceipt)pendingReceipt.market=this.value});
+document.getElementById("detailDate").addEventListener("change",function(){this.dataset.auto="0";if(pendingReceipt)pendingReceipt.date=this.value});
+document.getElementById("detailName").addEventListener("input",function(){this.dataset.auto="0";if(pendingReceipt)pendingReceipt.name=this.value});
+document.getElementById("receiptItems").addEventListener("input",function(){this.dataset.auto="0"});
 document.getElementById("receiptPhoto").onchange=function(e){var f=e.target.files&&e.target.files[0];if(!f)return;if((pendingReceipt.photos||[]).length>=3)return toast("Máximo de 3 fotos por nota.");var fr=new FileReader();fr.onload=function(){pendingReceipt.photos=pendingReceipt.photos||[];pendingReceipt.photos.push(fr.result);renderPhotos();toast("Foto adicionada.");ocrReceiptPhoto(f)};fr.readAsDataURL(f)};
 function renderPhotos(){var g=document.getElementById("photoGrid");g.innerHTML="";(pendingReceipt&&pendingReceipt.photos||[]).forEach(function(src){var i=document.createElement("img");i.src=src;g.appendChild(i)})}
 document.getElementById("demo").onclick=function(){document.getElementById("receiptItems").value="Leite Integral 1L | 2 | 11,98\nSuco de Uva Integral 1L | 1 | 14,70\nChocolate 100g | 1 | 9,90"};
@@ -429,7 +482,7 @@ function parseItems(t){return t.split(/\n+/).map(function(x){var p=x.split("|");
 document.getElementById("compare").onclick=function(){if(!pendingReceipt)return;pendingReceipt.market=document.getElementById("detailMarket").value.trim();pendingReceipt.date=document.getElementById("detailDate").value;pendingReceipt.name=document.getElementById("detailName").value.trim()||pendingReceipt.name;pendingReceipt.items=parseItems(document.getElementById("receiptItems").value);var l=state.lists.find(function(x){return x.id===pendingReceipt.listId});if(!l){document.getElementById("recon").innerHTML="<div class='blockx'><b class='blue'>Compra avulsa</b><div class='meta'>"+pendingReceipt.items.length+" item(ns) serão registrados sem comparação com lista.</div></div>";return}pendingReceipt.recon=reconcilePreview(l,pendingReceipt.items);showRecon(pendingReceipt.recon)};
 function reconcilePreview(l,rec){var used={},matched=[];var candidates=l.items.filter(function(i){return (Number(i.boughtQty)||0)<(Number(i.qty)||1)&&!i.skipReason});candidates.forEach(function(li){var best=-1,bs=0;rec.forEach(function(r,i){if(used[i])return;var s=score(li.name,r.name);if(s>bs){bs=s;best=i}});if(best>=0&&bs>=.5){used[best]=1;matched.push({itemId:li.id,listName:li.name,planned:li.qty,already:li.boughtQty||0,rec:rec[best],score:bs})}});return{matched:matched,missing:candidates.filter(function(li){return !matched.some(function(m){return m.itemId===li.id})}),extra:rec.filter(function(r,i){return !used[i]})}}
 function showRecon(r){var w=document.getElementById("recon");function block(t,c,a,f){var h="<div class='blockx'><b class='"+c+"'>"+t+" ("+a.length+")</b>";a.forEach(function(x){h+="<div class='meta' style='margin-top:6px'>"+f(x)+"</div>"});return h+"</div>"}w.innerHTML=block("Da lista e encontrados","ok",r.matched,function(m){return esc(m.listName)+" ← "+esc(m.rec.name)+" · qtd "+m.rec.qty})+block("Ainda faltando","warn",r.missing,function(x){return esc(x.name)})+block("Comprados fora da lista","badtext",r.extra,function(x){return esc(x.name)+" · R$ "+x.total.toFixed(2).replace(".",",")})}
-document.getElementById("savePurchase").onclick=function(){if(!pendingReceipt)return;pendingReceipt.market=document.getElementById("detailMarket").value.trim();pendingReceipt.date=document.getElementById("detailDate").value||today();pendingReceipt.name=document.getElementById("detailName").value.trim()||pendingReceipt.name;pendingReceipt.items=parseItems(document.getElementById("receiptItems").value);var l=state.lists.find(function(x){return x.id===pendingReceipt.listId});if(l){pendingReceipt.listName=l.name;if(!pendingReceipt.recon)pendingReceipt.recon=reconcilePreview(l,pendingReceipt.items);pendingReceipt.recon.matched.forEach(function(m){var it=l.items.find(function(x){return x.id===m.itemId});if(it){it.boughtQty=(Number(it.boughtQty)||0)+(Number(m.rec.qty)||1);it.skipReason=""}});l.purchases=l.purchases||[];l.purchases.push(JSON.parse(JSON.stringify(pendingReceipt)));state.current=l.id}else{state.standalonePurchases=state.standalonePurchases||[];state.standalonePurchases.push(JSON.parse(JSON.stringify(pendingReceipt)))}save();document.getElementById("detailModal").classList.remove("on");document.getElementById("qrText").value="";pendingReceipt=null;if(l)page("list");else page("history");toast("Compra salva.")};
+document.getElementById("savePurchase").onclick=function(){if(!pendingReceipt)return;pendingReceipt.listId=document.getElementById("detailListLink").value||null;pendingReceipt.market=document.getElementById("detailMarket").value.trim();pendingReceipt.date=document.getElementById("detailDate").value||today();pendingReceipt.name=document.getElementById("detailName").value.trim()||pendingReceipt.name;pendingReceipt.items=parseItems(document.getElementById("receiptItems").value);var l=state.lists.find(function(x){return x.id===pendingReceipt.listId});if(l){pendingReceipt.listName=l.name;if(!pendingReceipt.recon)pendingReceipt.recon=reconcilePreview(l,pendingReceipt.items);pendingReceipt.recon.matched.forEach(function(m){var it=l.items.find(function(x){return x.id===m.itemId});if(it){it.boughtQty=(Number(it.boughtQty)||0)+(Number(m.rec.qty)||1);it.skipReason=""}});l.purchases=l.purchases||[];l.purchases.push(JSON.parse(JSON.stringify(pendingReceipt)));state.current=l.id}else{state.standalonePurchases=state.standalonePurchases||[];state.standalonePurchases.push(JSON.parse(JSON.stringify(pendingReceipt)))}save();document.getElementById("detailModal").classList.remove("on");document.getElementById("qrText").value="";pendingReceipt=null;if(l)page("list");else page("history");toast("Compra salva.")};
 window.addEventListener("beforeunload",()=>{stopQrScan().catch(()=>{})});render();loadZxingScanner().catch(()=>{});
 })();
 </script>
