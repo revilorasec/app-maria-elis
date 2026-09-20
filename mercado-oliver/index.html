@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#173d28">
+<title>Mercado Oliver</title>
+<style>
+:root{--g:#1f7a4d;--g2:#e9f7ef;--bg:#f4f7f5;--card:#fff;--ink:#17211b;--muted:#6f7a72;--line:#e2e9e4;--warn:#a76500;--bad:#b63737}*{box-sizing:border-box}body{margin:0;background:var(--bg);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:var(--ink)}button,input,select,textarea{font:inherit}.app{max-width:760px;margin:auto;padding:14px 14px 90px}.top{display:flex;gap:10px;align-items:center;margin-bottom:14px}.logo{width:44px;height:44px;border-radius:13px;background:var(--g);color:#fff;display:grid;place-items:center;font-weight:900}.top b{font-size:19px}.top small{display:block;color:var(--muted)}.page{display:none}.page.on{display:block}.hero{background:linear-gradient(135deg,#153d28,#238254);color:#fff;border-radius:22px;padding:18px}.hero h1{font-size:24px;margin:4px 0}.hero p{margin:0;color:#d8ebdf;font-size:13px}.sec{margin-top:16px}.card{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:14px}.row{display:flex;gap:9px;align-items:center;flex-wrap:wrap}.grow{flex:1}.field{width:100%;min-height:44px;border:1px solid var(--line);border-radius:12px;padding:11px;background:#fff}.btn{border:1px solid var(--line);border-radius:12px;padding:11px 13px;background:#fff;font-weight:700}.primary{background:var(--g);border-color:var(--g);color:#fff}.soft{background:var(--g2);color:var(--g);border-color:#cce7d5}.item{background:#fff;border:1px solid var(--line);border-radius:16px;padding:12px;margin:8px 0}.item h3{margin:0 0 4px;font-size:14px}.meta{font-size:12px;color:var(--muted);line-height:1.4}.chips{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}.chip{border:1px solid var(--line);background:#fff;border-radius:999px;padding:7px 9px;font-size:11px;font-weight:700}.chip.sel{background:var(--g2);color:var(--g)}.chip.bad{background:#fff1f1;color:var(--bad)}.reason{margin-top:8px}.qr{background:#10241a;color:#fff;border-radius:17px;padding:14px}.qr small{color:#bdd8c6}.qr video{display:none;width:100%;margin-top:10px;border-radius:14px;background:#000}.qr video.on{display:block}.photo{max-width:100%;max-height:220px;border-radius:14px;margin-top:10px;display:none}.photo.on{display:block}.block{border:1px solid var(--line);border-radius:14px;padding:10px;margin-top:8px}.ok{color:var(--g)}.warn{color:var(--warn)}.badtext{color:var(--bad)}.bottom{position:fixed;bottom:0;left:0;right:0;background:#fff;border-top:1px solid var(--line);padding:7px 8px calc(7px + env(safe-area-inset-bottom));display:flex;justify-content:center}.nav{max-width:760px;width:100%;display:grid;grid-template-columns:repeat(4,1fr);gap:4px}.nav button{border:0;background:transparent;padding:8px 4px;color:var(--muted);border-radius:10px}.nav button.on{background:var(--g2);color:var(--g)}.toast{position:fixed;left:50%;bottom:82px;transform:translateX(-50%);background:#14261b;color:#fff;padding:10px 12px;border-radius:11px;display:none;z-index:50;max-width:90%;font-size:12px}.toast.on{display:block}h2{font-size:17px;margin:0 0 10px}@media(max-width:520px){.row.stack>*{width:100%}}
+</style>
+</head>
+<body>
+<div class="app">
+<div class="top"><div class="logo">MO</div><div><b>Mercado Oliver</b><small>Teste publicado · dados locais neste aparelho</small></div></div>
+
+<section id="home" class="page on">
+<div class="hero"><small>COMPRA INTELIGENTE</small><h1>Listas que viram histórico.</h1><p>Planeje, marque o que comprou e depois reconcilie a compra com a NFC-e.</p></div>
+<div class="sec card"><h2>Nova lista</h2><div class="row stack"><input id="newList" class="field grow" placeholder="Ex.: Compra do mês"><button id="addList" class="btn primary">Criar lista</button></div></div>
+<div class="sec"><h2>Suas listas</h2><div id="lists"></div></div>
+</section>
+
+<section id="list" class="page">
+<div class="card"><div class="row"><div class="grow"><h2 id="listTitle">Lista</h2><div class="meta" id="listMeta"></div></div><button class="btn" id="toHome">Listas</button></div></div>
+<div class="sec card"><h2>Adicionar item</h2><div class="row stack"><input id="itemName" class="field grow" placeholder="Produto"><input id="itemQty" class="field" value="1" inputmode="decimal" style="max-width:100px"><button id="addItem" class="btn primary">Adicionar</button></div></div>
+<div class="sec"><h2>Itens</h2><div id="items"></div></div>
+<div class="sec card"><button id="toReceipt" class="btn primary" style="width:100%">Finalizar compra / Nota fiscal</button></div>
+</section>
+
+<section id="receipt" class="page">
+<div class="card"><div class="row"><div class="grow"><h2>Nota fiscal da compra</h2><div class="meta">Leitor igual ao Racha Viagem: ZXing + câmera traseira.</div></div><button class="btn" id="backList">Voltar</button></div></div>
+<div class="sec card">
+<h2>1. QR Code da NFC-e</h2>
+<div class="qr">
+<b>Escanear QR Code</b><br><small>Aponte para o QR. Ao reconhecer, a câmera fecha automaticamente.</small>
+<div class="row" style="margin-top:10px"><button id="scan" class="btn soft">Abrir câmera</button><label class="btn" style="background:#fff;color:#173d28">Fotografar QR<input id="qrPhoto" type="file" accept="image/*" capture="environment" hidden></label></div>
+<div id="camMsg" class="meta" style="color:#cfe5d7;margin-top:8px"></div>
+<video id="video" playsinline muted></video>
+</div>
+<textarea id="qrText" class="field" rows="3" style="margin-top:10px" placeholder="Conteúdo/URL do QR aparecerá aqui"></textarea>
+</div>
+<div class="sec card">
+<h2>2. Foto da nota</h2>
+<label class="btn soft">Adicionar foto da nota<input id="receiptPhoto" type="file" accept="image/*" capture="environment" hidden></label>
+<img id="receiptPreview" class="photo" alt="Foto da nota fiscal">
+</div>
+<div class="sec card">
+<h2>3. Itens da nota</h2>
+<div class="meta">Enquanto conectamos a leitura automática da SEFAZ, use este campo para testar a reconciliação: produto | quantidade | preço total.</div>
+<textarea id="receiptItems" class="field" rows="7" style="margin-top:8px" placeholder="Leite Integral 1L | 2 | 11,98"></textarea>
+<button id="demo" class="btn" style="margin-top:8px">Preencher demonstração</button>
+<button id="reconcile" class="btn primary" style="margin-top:8px">Comparar com a lista</button>
+</div>
+<div class="sec"><h2>Reconciliação</h2><div id="recon"></div></div>
+<div class="sec card"><button id="finish" class="btn primary" disabled>Concluir e guardar histórico</button></div>
+</section>
+
+<section id="history" class="page"><h2>Histórico</h2><div id="historyList"></div></section>
+</div>
+
+<div class="bottom"><div class="nav"><button data-p="home" class="on">Listas</button><button data-p="list">Compra</button><button data-p="receipt">Nota</button><button data-p="history">Histórico</button></div></div>
+<div id="toast" class="toast"></div>
+<script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js"></script>
+<script>
+(function(){
+var KEY="mercado_oliver_public_v1";
+var reasons=["Não tinha","Qualidade ruim / feio","Preço alto","Troquei por outro","Desisti","Outro"];
+var state=load(),reader=null;
+function fresh(){return {lists:[],current:null}}
+function load(){try{return JSON.parse(localStorage.getItem(KEY))||fresh()}catch(e){return fresh()}}
+function save(){localStorage.setItem(KEY,JSON.stringify(state));render()}
+function cur(){for(var i=0;i<state.lists.length;i++)if(state.lists[i].id===state.current)return state.lists[i];return null}
+function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2)}
+function esc(s){return String(s||"").replace(/[&<>"']/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c]})}
+function toast(s){var e=document.getElementById("toast");e.textContent=s;e.classList.add("on");clearTimeout(e.t);e.t=setTimeout(function(){e.classList.remove("on")},2600)}
+function page(p){document.querySelectorAll(".page").forEach(function(x){x.classList.toggle("on",x.id===p)});document.querySelectorAll(".nav button").forEach(function(x){x.classList.toggle("on",x.dataset.p===p)});if(p!=="receipt")stopCam();scrollTo(0,0)}
+function norm(s){return String(s||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase().replace(/[^a-z0-9]+/g," ").trim()}
+function score(a,b){var A=norm(a).split(" ").filter(function(x){return x.length>1}),B=norm(b).split(" ").filter(function(x){return x.length>1}),n=0;A.forEach(function(x){if(B.indexOf(x)>=0)n++});return n/Math.max(1,Math.min(A.length,B.length))}
+function render(){
+var L=document.getElementById("lists");L.innerHTML="";
+state.lists.forEach(function(l){var d=document.createElement("div");d.className="card sec";d.innerHTML="<div class='row'><div class='grow'><b>"+esc(l.name)+"</b><div class='meta'>"+l.items.length+" itens · "+(l.status==="closed"?"finalizada":"aberta")+"</div></div><button class='btn'>Abrir</button></div>";d.querySelector("button").onclick=function(){state.current=l.id;save();page("list")};L.appendChild(d)});
+var l=cur();if(l){
+document.getElementById("listTitle").textContent=l.name;document.getElementById("listMeta").textContent=l.status==="closed"?"Compra finalizada":"Lista aberta";
+var I=document.getElementById("items");I.innerHTML="";
+l.items.forEach(function(it){var d=document.createElement("div");d.className="item";var st=it.status==="bought"?"Comprado":it.status==="skipped"?(it.reason||"Não comprado"):"Pendente";d.innerHTML="<h3>"+esc(it.name)+"</h3><div class='meta'>Qtd. "+it.qty+" · <b>"+esc(st)+"</b></div>";if(l.status!=="closed"){var c=document.createElement("div");c.className="chips";[["pending","Pendente"],["bought","✓ Comprei"],["skipped","Não comprei"]].forEach(function(a){var b=document.createElement("button");b.className="chip"+(it.status===a[0]?" sel":"");b.textContent=a[1];b.onclick=function(){it.status=a[0];if(a[0]!=="skipped")it.reason="";save()};c.appendChild(b)});d.appendChild(c);if(it.status==="skipped"){var s=document.createElement("select");s.className="field reason";s.innerHTML="<option value=''>Motivo...</option>";reasons.forEach(function(r){var o=document.createElement("option");o.textContent=r;o.value=r;if(it.reason===r)o.selected=true;s.appendChild(o)});s.onchange=function(){it.reason=s.value;save()};d.appendChild(s)}}I.appendChild(d)})
+document.getElementById("toReceipt").disabled=l.status==="closed";
+}
+var H=document.getElementById("historyList");H.innerHTML="";state.lists.filter(function(x){return x.status==="closed"}).forEach(function(x){var d=document.createElement("div");d.className="card sec";d.innerHTML="<b>"+esc(x.name)+"</b><div class='meta'>"+new Date(x.closedAt).toLocaleString("pt-BR")+" · "+((x.recon&&x.recon.extra.length)||0)+" fora da lista"+(x.receipt&&x.receipt.photo?" · foto da nota ✓":"")+"</div>";H.appendChild(d)})
+}
+document.getElementById("addList").onclick=function(){var n=document.getElementById("newList").value.trim();if(!n)return toast("Digite o nome da lista.");var l={id:uid(),name:n,status:"open",items:[],receipt:{},recon:null,closedAt:null};state.lists.unshift(l);state.current=l.id;document.getElementById("newList").value="";save();page("list")};
+document.getElementById("addItem").onclick=function(){var l=cur(),n=document.getElementById("itemName").value.trim();if(!l||!n)return toast("Digite o produto.");l.items.push({id:uid(),name:n,qty:Math.max(.01,Number(document.getElementById("itemQty").value.replace(",","."))||1),status:"pending",reason:""});document.getElementById("itemName").value="";save()};
+document.getElementById("toHome").onclick=function(){page("home")};document.getElementById("toReceipt").onclick=function(){page("receipt")};document.getElementById("backList").onclick=function(){page("list")};
+document.querySelectorAll(".nav button").forEach(function(b){b.onclick=function(){if((b.dataset.p==="list"||b.dataset.p==="receipt")&&!cur())return toast("Abra uma lista primeiro.");page(b.dataset.p)}});
+
+async function startCam(){
+var msg=document.getElementById("camMsg"),video=document.getElementById("video");msg.textContent="";
+if(!isSecureContext)return msg.textContent="Abra este endereço HTTPS diretamente no Safari/Chrome.";
+if(!window.ZXing||!ZXing.BrowserMultiFormatReader)return msg.textContent="ZXing não carregou. Verifique a internet e tente novamente.";
+stopCam();reader=new ZXing.BrowserMultiFormatReader();video.classList.add("on");msg.textContent="Aponte para o QR Code da NFC-e.";
+try{
+await reader.decodeFromConstraints({audio:false,video:{facingMode:{ideal:"environment"},width:{ideal:1920},height:{ideal:1080}}},video,function(result,err){
+if(result){var v=typeof result.getText==="function"?result.getText():result.text;if(v){document.getElementById("qrText").value=v;var l=cur();if(l){l.receipt=l.receipt||{};l.receipt.qr=v;l.receipt.qrReadAt=new Date().toISOString();save()}msg.textContent="QR Code lido com sucesso.";toast("QR Code lido.");stopCam()}}
+})
+}catch(e){stopCam();msg.textContent="Erro da câmera: "+(e&&e.name?e.name:"desconhecido")+". Verifique a permissão do navegador."}
+}
+function stopCam(){try{if(reader)reader.reset()}catch(e){}reader=null;var v=document.getElementById("video");if(v&&v.srcObject){try{v.srcObject.getTracks().forEach(function(t){t.stop()})}catch(e){}v.srcObject=null}if(v)v.classList.remove("on")}
+document.getElementById("scan").onclick=startCam;
+document.getElementById("qrPhoto").onchange=function(e){var f=e.target.files&&e.target.files[0],msg=document.getElementById("camMsg");if(!f)return;if(!window.ZXing)return msg.textContent="ZXing não carregou.";var u=URL.createObjectURL(f),img=new Image();img.onload=async function(){try{var r=new ZXing.BrowserMultiFormatReader(),res=await r.decodeFromImage(img),v=typeof res.getText==="function"?res.getText():res.text;document.getElementById("qrText").value=v;var l=cur();if(l){l.receipt=l.receipt||{};l.receipt.qr=v;save()}msg.textContent="QR Code reconhecido pela foto.";toast("QR Code lido.")}catch(x){msg.textContent="Não consegui reconhecer o QR nesta foto. Tente enquadrar somente o QR, com boa luz e sem reflexo."}finally{URL.revokeObjectURL(u)}};img.src=u};
+document.getElementById("receiptPhoto").onchange=function(e){var f=e.target.files&&e.target.files[0];if(!f)return;var fr=new FileReader();fr.onload=function(){var l=cur();if(!l)return;l.receipt=l.receipt||{};l.receipt.photo=fr.result;save();var im=document.getElementById("receiptPreview");im.src=fr.result;im.classList.add("on");toast("Foto associada à compra.")};fr.readAsDataURL(f)};
+document.getElementById("demo").onclick=function(){document.getElementById("receiptItems").value="Leite Integral 1L | 2 | 11,98\nSuco de Uva Integral 1L | 1 | 14,70\nChocolate 100g | 1 | 9,90"};
+function parse(t){return t.split(/\n+/).map(function(x){var p=x.split("|");return {name:(p[0]||"").trim(),qty:Number((p[1]||"1").trim().replace(",","."))||1,total:Number((p[2]||"0").trim().replace(/\./g,"").replace(",","."))||0}}).filter(function(x){return x.name})}
+document.getElementById("reconcile").onclick=function(){var l=cur(),rec=parse(document.getElementById("receiptItems").value);if(!l||!rec.length)return toast("Informe os itens da nota.");var used={},matched=[];l.items.forEach(function(li){var bi=-1,bs=0;rec.forEach(function(r,i){if(used[i])return;var s=score(li.name,r.name);if(s>bs){bs=s;bi=i}});if(bi>=0&&bs>=.5){used[bi]=1;li.status="bought";li.reason="";matched.push({list:li,rec:rec[bi],score:bs})}});var extra=rec.filter(function(r,i){return !used[i]}),missing=l.items.filter(function(x){return !matched.some(function(m){return m.list.id===x.id})});l.recon={matched:matched,extra:extra,missing:missing};save();showRecon();document.getElementById("finish").disabled=false};
+function showRecon(){var l=cur(),w=document.getElementById("recon");if(!l||!l.recon){w.innerHTML="<div class='card meta'>Nenhuma comparação ainda.</div>";return}function block(t,c,a,fn){var h="<div class='block'><b class='"+c+"'>"+t+" ("+a.length+")</b>";a.forEach(function(x){h+="<div class='meta' style='margin-top:7px'>"+fn(x)+"</div>"});return h+"</div>"}w.innerHTML=block("Da lista e comprados","ok",l.recon.matched,function(m){return esc(m.list.name)+" ← "+esc(m.rec.name)})+block("Da lista e não encontrados","warn",l.recon.missing,function(x){return esc(x.name)+(x.reason?" · "+esc(x.reason):"")})+block("Comprados fora da lista","badtext",l.recon.extra,function(x){return esc(x.name)+" · R$ "+x.total.toFixed(2).replace(".",",")})}
+document.getElementById("finish").onclick=function(){var l=cur();if(!l||!l.recon)return;l.status="closed";l.closedAt=new Date().toISOString();save();page("history");toast("Compra guardada no histórico.")};
+window.addEventListener("beforeunload",stopCam);render();showRecon();
+})();
+</script>
+</body></html>
