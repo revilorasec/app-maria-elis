@@ -8,14 +8,14 @@
 <style>
 :root{--g:#16734a;--gd:#0f4f34;--g2:#e8f5ee;--bg:#f5f7f6;--card:#fff;--ink:#142019;--muted:#718078;--line:#dfe7e2;--warn:#9a6500;--bad:#b43a3a;--blue:#315c9d}
 *{box-sizing:border-box}body{margin:0;background:var(--bg);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;color:var(--ink)}button,input,select,textarea{font:inherit}.app{max-width:780px;margin:auto;padding:14px 14px 96px}.top{display:flex;align-items:center;gap:10px;margin-bottom:14px}.logo{width:46px;height:46px;border-radius:14px;background:var(--g);color:#fff;display:grid;place-items:center;font-weight:900;font-size:18px}.top b{font-size:20px}.top small{display:block;color:var(--muted);font-size:12px}.page{display:none}.page.on{display:block}.hero{background:linear-gradient(135deg,var(--gd),#238959);color:#fff;border-radius:24px;padding:19px}.hero h1{margin:4px 0;font-size:25px}.hero p{margin:0;color:#dff0e6;font-size:13px;line-height:1.45}.hero-actions{display:grid;grid-template-columns:1.4fr 1fr;gap:9px;margin-top:15px}.hero .btn{border:0}.sec{margin-top:16px}.card{background:#fff;border:1px solid var(--line);border-radius:19px;padding:14px}.row{display:flex;gap:9px;align-items:center;flex-wrap:wrap}.grow{flex:1;min-width:0}.field{width:100%;min-height:46px;border:1px solid var(--line);border-radius:12px;padding:11px 12px;background:#fff;color:var(--ink);font-size:16px}.btn{min-height:44px;border:1px solid var(--line);border-radius:12px;padding:10px 13px;background:#fff;font-weight:750;color:var(--ink)}.btn.primary{background:var(--g);border-color:var(--g);color:#fff}.btn.soft{background:var(--g2);border-color:#cce6d6;color:var(--g)}.btn.dark{background:#10251a;border-color:#10251a;color:#fff}.btn.block{width:100%}.kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:12px}.kpi{background:#fff;border:1px solid var(--line);border-radius:15px;padding:11px}.kpi b{display:block;font-size:19px}.kpi span{font-size:11px;color:var(--muted)}h2{font-size:17px;margin:0 0 10px}h3{margin:0;font-size:14px}.meta{font-size:12px;color:var(--muted);line-height:1.45}.list-card,.item,.purchase{background:#fff;border:1px solid var(--line);border-radius:16px;padding:12px;margin:8px 0}.progress{height:7px;background:#edf1ee;border-radius:999px;overflow:hidden;margin-top:9px}.progress i{display:block;height:100%;background:var(--g);width:0}.chips{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}.chip{border:1px solid var(--line);background:#fff;border-radius:999px;padding:7px 9px;font-size:11px;font-weight:700}.chip.sel{background:var(--g2);color:var(--g);border-color:#cde4d6}.chip.bad{background:#fff1f1;color:var(--bad)}.qrbox{background:#10251a;color:#fff;border-radius:19px;padding:14px}.qrbox small{color:#c7ddcf}.camline{margin-top:8px;font-size:12px;color:#c7ddcf}
-.qr-scan-modal{position:fixed;inset:0;background:rgba(8,20,45,.62);display:none;place-items:center;padding:16px;z-index:80}
+.qr-scan-modal{position:fixed;inset:0;background:#08101b;display:none;place-items:center;padding:0;z-index:80}
 .qr-scan-modal.on{display:grid}
-.qr-scan-sheet{background:#fff;width:min(560px,100%);max-height:94vh;overflow:auto;border-radius:18px;padding:16px}
+.qr-scan-sheet{background:#0b1220;color:#fff;width:100%;height:100%;max-height:none;overflow:auto;border-radius:0;padding:16px;display:flex;flex-direction:column}
 .qr-scan-sheet h3{margin:0 0 6px;font-size:19px}
-.qr-scan-sheet p{margin:0;color:var(--muted);font-size:12px;line-height:1.45}
-.qr-reader{width:min(520px,88vw);margin:12px auto 0;border-radius:18px;overflow:hidden;background:#0c1527}
+.qr-scan-sheet p{margin:0;color:#cbd5e1;font-size:13px;line-height:1.45}
+.qr-reader{width:100%;max-width:760px;margin:12px auto 0;border-radius:18px;overflow:hidden;background:#000;flex:1;min-height:0}
 .qr-video-wrap{position:relative;width:100%;overflow:hidden;border-radius:18px;background:#0f172a}
-.qr-video-wrap video{display:block;width:100%!important;height:auto!important;aspect-ratio:4/3;object-fit:cover!important;background:#0f172a;border-radius:18px}
+.qr-video-wrap video{display:block;width:100%!important;height:min(68vh,620px)!important;object-fit:cover!important;background:#000;border-radius:18px}
 .qr-guide{position:absolute;top:18%;left:12%;right:12%;height:42%;border:3px solid #b8df74;border-radius:16px;box-shadow:0 0 0 999px #0005;pointer-events:none}
 .qr-scan-status{margin-top:10px;font-size:12px;color:#506158;min-height:18px}
 .qr-scan-actions{display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap;margin-top:12px}.photo{max-width:100%;max-height:240px;border-radius:14px;margin-top:10px;display:none}.photo.on{display:block}.receipt-photo-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin-top:8px}.receipt-photo-grid img{width:100%;aspect-ratio:1/1;object-fit:cover;border-radius:11px;border:1px solid var(--line)}.blockx{border:1px solid var(--line);border-radius:14px;padding:10px;margin-top:8px}.ok{color:var(--g)}.warn{color:var(--warn)}.badtext{color:var(--bad)}.blue{color:var(--blue)}.banner{border-radius:16px;padding:12px;background:#fff8e8;border:1px solid #f0ddad;color:#6d4b00;font-size:12px}.hidden{display:none!important}.split{display:grid;grid-template-columns:1fr 1fr;gap:8px}.bottom{position:fixed;left:0;right:0;bottom:0;background:#fff;border-top:1px solid var(--line);padding:7px 8px calc(7px + env(safe-area-inset-bottom));display:flex;justify-content:center;z-index:30}.nav{max-width:780px;width:100%;display:grid;grid-template-columns:repeat(4,1fr);gap:4px}.nav button{border:0;background:transparent;min-height:48px;border-radius:11px;color:var(--muted)}.nav button.on{background:var(--g2);color:var(--g);font-weight:700}.toast{position:fixed;left:50%;bottom:84px;transform:translateX(-50%);background:#10251a;color:#fff;padding:10px 12px;border-radius:11px;display:none;z-index:60;max-width:90%;font-size:12px}.toast.on{display:block}.modal{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:50;display:none;align-items:flex-end;justify-content:center;padding:10px}.modal.on{display:flex}.sheet{background:#fff;width:min(780px,100%);border-radius:22px 22px 14px 14px;padding:16px;max-height:88vh;overflow:auto}.sheet h2{font-size:19px}.separator{height:1px;background:var(--line);margin:12px 0}.mini-status{display:inline-block;padding:4px 7px;border-radius:999px;background:#f0f4f1;font-size:10px;color:var(--muted)}
@@ -96,7 +96,7 @@
     <p>Aponte a câmera para o QR Code. A leitura acontece automaticamente, sem tirar foto.</p>
     <div id="qrReader" class="qr-reader"></div>
     <div id="qrScanStatus" class="qr-scan-status"></div>
-    <div class="qr-scan-actions"><button id="qrSwitch" class="btn">Trocar leitor</button><button id="qrClose" class="btn">Cancelar</button></div>
+    <div class="qr-scan-actions"><button id="qrClose" class="btn">Cancelar</button></div>
   </div>
 </div>
 
@@ -156,7 +156,7 @@
 (function(){
 var FISCAL_API="https://dumoqktblhultwxmckbd.supabase.co/functions/v1/mercado-fiscal-qr";
 var SUPABASE_ANON="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR1bW9xa3RibGh1bHR3eG1ja2JkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM4OTYzODQsImV4cCI6MjA5OTQ3MjM4NH0.7JXoeer17mPw9A4i6yJBTwTn0pBNL0FUkkBed9Y4qmg";
-var KEY="mercado_oliver_v3",qrZxingControls=null,qrZxingReader=null,qrScanner=null,qrNativeStream=null,qrNativeVideo=null,qrNativeTimer=null,qrFallbackTimer=null,qrScanEngine="",qrScanDone=false,pendingReceipt=null,lastPage="home",creatingList=false;
+var KEY="mercado_oliver_v3",qrZxingControls=null,qrZxingReader=null,qrScanDone=false,pendingReceipt=null,lastPage="home",creatingList=false;
 var reasons=["Não tinha","Qualidade ruim / feio","Preço alto","Troquei por outro","Desisti","Outro"];
 var state=load();
 function blank(){return {lists:[],current:null,standalonePurchases:[]}}
@@ -199,29 +199,15 @@ document.getElementById("scanForList").onclick=function(){var l=cur();pendingRec
 document.getElementById("closeList").onclick=function(){var l=cur();if(!l)return;l.status="closed";l.closedAt=new Date().toISOString();save();page("home");toast("Lista encerrada.")};
 document.querySelectorAll(".nav button").forEach(function(b){b.onclick=function(){if(b.dataset.p==="list"&&!cur())return toast("Abra uma lista primeiro.");page(b.dataset.p)}});
 
-async function loadHtml5Scanner(){
-  if(window.Html5Qrcode)return window.Html5Qrcode;
-  if(window.__html5QrLoading)return window.__html5QrLoading;
-  window.__html5QrLoading=new Promise(function(res,rej){
-    var s=document.createElement('script');
-    s.src='https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js';
-    s.async=true;
-    var tm=setTimeout(function(){rej(Error('HTML5_QR_LOAD_TIMEOUT'))},10000);
-    s.onload=function(){clearTimeout(tm);window.Html5Qrcode?res(window.Html5Qrcode):rej(Error('HTML5_QR_NOT_LOADED'))};
-    s.onerror=function(){clearTimeout(tm);rej(Error('HTML5_QR_LOAD_FAILED'))};
-    document.head.appendChild(s);
-  }).finally(function(){window.__html5QrLoading=null});
-  return window.__html5QrLoading;
-}
 async function loadZxingScanner(){
-  if(window.ZXingBrowser?.BrowserQRCodeReader)return window.ZXingBrowser;
+  if(window.ZXingBrowser?.BrowserMultiFormatReader)return window.ZXingBrowser;
   if(window.__zxingQrLoading)return window.__zxingQrLoading;
   window.__zxingQrLoading=new Promise((res,rej)=>{
     const s=document.createElement('script');
     s.src='https://unpkg.com/@zxing/browser@0.1.4/umd/zxing-browser.min.js';
     s.async=true;
     const tm=setTimeout(()=>rej(Error('ZXING_QR_LOAD_TIMEOUT')),12000);
-    s.onload=()=>{clearTimeout(tm);window.ZXingBrowser?.BrowserQRCodeReader?res(window.ZXingBrowser):rej(Error('ZXING_QR_NOT_LOADED'))};
+    s.onload=()=>{clearTimeout(tm);window.ZXingBrowser?.BrowserMultiFormatReader?res(window.ZXingBrowser):rej(Error('ZXING_QR_NOT_LOADED'))};
     s.onerror=()=>{clearTimeout(tm);rej(Error('ZXING_QR_LOAD_FAILED'))};
     document.head.appendChild(s);
   }).finally(()=>{window.__zxingQrLoading=null});
@@ -229,18 +215,8 @@ async function loadZxingScanner(){
 }
 async function stopQrScan(){
   qrScanDone=true;
-  qrScanEngine='';
-  if(qrFallbackTimer){clearTimeout(qrFallbackTimer);qrFallbackTimer=null}
-  if(qrNativeTimer){clearTimeout(qrNativeTimer);qrNativeTimer=null}
   if(qrZxingControls){try{await Promise.resolve(qrZxingControls.stop())}catch{}qrZxingControls=null}
   qrZxingReader=null;
-  if(qrNativeVideo){try{qrNativeVideo.pause();qrNativeVideo.srcObject=null}catch{}qrNativeVideo=null}
-  if(qrNativeStream){try{qrNativeStream.getTracks().forEach(function(t){t.stop()})}catch{}qrNativeStream=null}
-  if(qrScanner){
-    var scanner=qrScanner;qrScanner=null;
-    try{await scanner.stop().catch(function(){})}catch{}
-    try{await scanner.clear().catch(function(){})}catch{}
-  }
   var host=document.getElementById('qrReader');if(host)host.innerHTML='';
   document.getElementById('qrScanModal')?.classList.remove('on');
 }
@@ -286,165 +262,64 @@ async function finishQrScan(raw){
   document.getElementById('qrText').value=text;
   document.getElementById('camMsg').textContent='QR reconhecido.';
 
-  await stopQrScan();
+  const controls=qrZxingControls;qrZxingControls=null;qrZxingReader=null;
+  try{controls?.stop?.()}catch{}
+  const host=document.getElementById('qrReader');if(host)host.innerHTML='';
+  document.getElementById('qrScanModal')?.classList.remove('on');
+
   openDetail();
   renderFiscalDetails();
   toast('QR reconhecido. Buscando dados da nota…');
-  resolveFiscalInBackground(text);
-}
-async function resolveFiscalInBackground(text){
-  var st=document.getElementById('detailLookupStatus');
-  if(st){st.textContent='QR reconhecido. Buscando supermercado, data, itens, valores e tributos…';st.className='banner'}
-  try{
-    const resolved=await resolveFiscalQr(text);
-    if(!pendingReceipt||pendingReceipt.qr!==text)return;
-    pendingReceipt.fiscal={...(pendingReceipt.fiscal||{}),...Object.fromEntries(Object.entries(resolved?.fiscal||{}).filter(function(e){return e[1]!==null&&e[1]!==undefined&&e[1]!==""}))};
-    pendingReceipt.fiscalLoading=false;
-    applyFiscalToOpenScreens();
-    var f=pendingReceipt.fiscal||{};
-    var market=f.establishment||f.trade_name||f.legal_name||'';
-    var parts=[market,f.date_time,f.value!=null?moneyBR(f.value):''].filter(Boolean);
-    if(st){st.textContent=parts.length?'Nota identificada: '+parts.join(' · '):'Nota reconhecida. Confira os dados encontrados.';st.className='banner'}
-    document.getElementById('camMsg').textContent='Nota fiscal reconhecida.';
-    if(resolved?.warning)console.warn('Consulta NFC-e:',resolved.warning);
-  }catch(err){
-    console.error('Consulta fiscal',err);
-    if(!pendingReceipt||pendingReceipt.qr!==text)return;
-    pendingReceipt.fiscalLoading=false;
-    if(st){st.textContent='QR reconhecido, mas a consulta fiscal não respondeu. Os dados que puderem ser obtidos localmente foram mantidos.';st.className='banner'}
-    document.getElementById('camMsg').textContent='QR reconhecido; consulta fiscal indisponível.';
-  }
-}
-function applyFiscalToOpenScreens(){
-  if(!pendingReceipt)return;
-  var f=pendingReceipt.fiscal||{};
-  var market=String(f.establishment||f.trade_name||f.legal_name||'').trim();
-  var d=fiscalDateToInput(f.date_time)||'';
-  var marketEl=document.getElementById('detailMarket');
-  var dateEl=document.getElementById('detailDate');
-  var nameEl=document.getElementById('detailName');
-  var itemsEl=document.getElementById('receiptItems');
-
-  if(market && (!marketEl.value || marketEl.dataset.auto==='1')){
-    marketEl.value=market; marketEl.dataset.auto='1'; pendingReceipt.market=market;
-  }
-  if(d && (!dateEl.value || dateEl.dataset.auto==='1')){
-    dateEl.value=d; dateEl.dataset.auto='1'; pendingReceipt.date=d;
-  }
-  if((market||d) && (!nameEl.value || nameEl.dataset.auto==='1')){
-    var generated=(market||pendingReceipt.market||'Compra')+' - '+fmtDate(d||pendingReceipt.date||today());
-    nameEl.value=generated; nameEl.dataset.auto='1'; pendingReceipt.name=generated;
-  }
-  var txt=fiscalItemsText(f);
-  if(txt && (!itemsEl.value || itemsEl.dataset.auto==='1')){
-    itemsEl.value=txt; itemsEl.dataset.auto='1';
-  }
-  renderFiscalDetails();
-}
-async function startNativeQrScan(){
-  if(!('BarcodeDetector' in window)||!navigator.mediaDevices?.getUserMedia)throw Error('NATIVE_UNAVAILABLE');
-  var formats=[];try{formats=await BarcodeDetector.getSupportedFormats?.()||[]}catch{}
-  if(formats.length&&!formats.includes('qr_code'))throw Error('NATIVE_UNAVAILABLE');
-  var detector=new BarcodeDetector({formats:['qr_code']});
-  qrNativeStream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:'environment'},width:{ideal:1920},height:{ideal:1080}}});
-  var host=document.getElementById('qrReader');host.innerHTML='<div class="qr-video-wrap"><video id="qrNativeVideo" playsinline muted autoplay></video><i class="qr-guide"></i></div>';
-  var video=document.getElementById('qrNativeVideo');qrNativeVideo=video;video.srcObject=qrNativeStream;await video.play();
-  var track=qrNativeStream.getVideoTracks()[0];
-  try{var caps=track.getCapabilities?.()||{};if(Array.isArray(caps.focusMode)&&caps.focusMode.includes('continuous'))await track.applyConstraints({advanced:[{focusMode:'continuous'}]})}catch{}
-  var tick=async function(){
-    if(qrScanDone||qrScanEngine!=='native'||!qrNativeVideo)return;
-    try{
-      if(video.readyState>=2){
-        var codes=await detector.detect(video);
-        var code=(codes||[]).find(function(x){return qrLooksValid(x.rawValue)})||(codes||[])[0];
-        if(code?.rawValue){await finishQrScan(code.rawValue);return}
-      }
-    }catch(e){}
-    qrNativeTimer=setTimeout(tick,70);
-  };
-  tick();
-}
-async function startZxingQrScan(){
-  qrScanEngine='zxing';
-  var ZX=await loadZxingScanner(),host=document.getElementById('qrReader');
-  host.innerHTML='<div class="qr-video-wrap"><video id="qrZxingVideo" playsinline muted autoplay></video><i class="qr-guide"></i></div>';
-  var video=document.getElementById('qrZxingVideo');
-  qrZxingReader=new ZX.BrowserMultiFormatReader();
-  var controlsRef=null;
-  var controls=await qrZxingReader.decodeFromConstraints({audio:false,video:{facingMode:{ideal:'environment'}}},video,function(result,error,ctrl){
-    if(!result||qrScanDone)return;
-    controlsRef=ctrl||controlsRef;qrZxingControls=controlsRef||qrZxingControls;
-    var text=typeof result.getText==='function'?result.getText():(result.text||String(result));
-    if(qrLooksValid(text))finishQrScan(text).catch(console.error);
-  });
-  controlsRef=controls;if(qrScanDone){try{controls.stop()}catch{}return}
-  qrZxingControls=controls;
-  var track=video.srcObject?.getVideoTracks?.()[0];
-  try{var caps=track?.getCapabilities?.()||{};if(Array.isArray(caps.focusMode)&&caps.focusMode.includes('continuous'))await track.applyConstraints({advanced:[{focusMode:'continuous'}]})}catch{}
-}
-async function startHtml5QrScan(){
-  qrScanEngine='html5';
-  await loadHtml5Scanner();
-  var cfg=window.Html5QrcodeSupportedFormats?{formatsToSupport:[Html5QrcodeSupportedFormats.QR_CODE],verbose:false,experimentalFeatures:{useBarCodeDetectorIfSupported:false}}:{verbose:false,experimentalFeatures:{useBarCodeDetectorIfSupported:false}};
-  qrScanner=new Html5Qrcode('qrReader',cfg);
-  await qrScanner.start({facingMode:{ideal:'environment'}},{fps:20,qrbox:function(w,h){var side=Math.floor(Math.min(w,h)*.90);return{width:side,height:side}},disableFlip:false},function(text){if(qrLooksValid(text))finishQrScan(text).catch(console.error)},function(){});
-}
-async function clearCurrentEngine(){
-  if(qrFallbackTimer){clearTimeout(qrFallbackTimer);qrFallbackTimer=null}
-  if(qrNativeTimer){clearTimeout(qrNativeTimer);qrNativeTimer=null}
-  if(qrZxingControls){try{await Promise.resolve(qrZxingControls.stop())}catch{}qrZxingControls=null}
-  qrZxingReader=null;
-  if(qrNativeVideo){try{qrNativeVideo.pause();qrNativeVideo.srcObject=null}catch{}qrNativeVideo=null}
-  if(qrNativeStream){try{qrNativeStream.getTracks().forEach(function(t){t.stop()})}catch{}qrNativeStream=null}
-  if(qrScanner){var s=qrScanner;qrScanner=null;try{await s.stop().catch(function(){})}catch{}try{await s.clear().catch(function(){})}catch{}}
-  var host=document.getElementById('qrReader');if(host)host.innerHTML='';
-}
-async function switchQrEngine(){
-  if(qrScanDone)return;
-  var status=document.getElementById('qrScanStatus');
-  var current=qrScanEngine;
-  await clearCurrentEngine();
-  try{
-    if(current==='native'){
-      status.textContent='Ajustando o leitor…';
-      await startZxingQrScan();
-      status.textContent='Leitor alternativo ativo. Aponte para o QR.';
-      qrFallbackTimer=setTimeout(function(){if(!qrScanDone)switchQrEngine().catch(console.error)},4500);
-    }else{
-      status.textContent='Ajustando o leitor…';
-      await startHtml5QrScan();
-      status.textContent='Leitor de alta compatibilidade ativo. Mantenha o QR dentro do quadro.';
-    }
-  }catch(e){
-    status.textContent='Não foi possível trocar o leitor: '+(e?.message||e);
-  }
+  setTimeout(function(){resolveFiscalInBackground(text)},0);
 }
 async function startQrScan(){
-  var status=document.getElementById('qrScanStatus'),msg=document.getElementById('camMsg');
+  const status=document.getElementById('qrScanStatus');
+  const msg=document.getElementById('camMsg');
   try{
     await stopQrScan();
     qrScanDone=false;
     document.getElementById('qrScanModal').classList.add('on');
-    status.textContent='Abrindo câmera…';msg.textContent='';
+    status.textContent='Aponte para o QR Code da NFC-e.';
+    msg.textContent='';
+
+    const ZX=await loadZxingScanner();
+    const host=document.getElementById('qrReader');
+    host.innerHTML='<div class="qr-video-wrap"><video id="qrZxingVideo" playsinline muted autoplay></video><i class="qr-guide"></i></div>';
+    const video=document.getElementById('qrZxingVideo');
+
+    qrZxingReader=new ZX.BrowserMultiFormatReader();
+    let controlsRef=null;
+    const controls=await qrZxingReader.decodeFromConstraints(
+      {audio:false,video:{facingMode:{ideal:'environment'},width:{ideal:1920},height:{ideal:1080}}},
+      video,
+      function(result,error,ctrl){
+        if(!result||qrScanDone)return;
+        controlsRef=ctrl||controlsRef;
+        qrZxingControls=controlsRef||qrZxingControls;
+        const text=typeof result.getText==='function'?result.getText():(result.text||String(result));
+        if(qrLooksValid(text))finishQrScan(text).catch(console.error);
+      }
+    );
+    controlsRef=controls;
+    if(qrScanDone){try{controls.stop()}catch{}return}
+    qrZxingControls=controls;
+
+    const track=video.srcObject?.getVideoTracks?.()[0];
+    const settings=track?.getSettings?.()||{};
     try{
-      qrScanEngine='native';
-      await startNativeQrScan();
-      status.textContent='Leitor ativo. Aponte para o QR Code.';
-      qrFallbackTimer=setTimeout(function(){if(!qrScanDone)switchQrEngine().catch(console.error)},3200);
-    }catch(nativeErr){
-      await clearCurrentEngine();
-      await startZxingQrScan();
-      status.textContent='Leitor ativo. Aponte para o QR Code.';
-      qrFallbackTimer=setTimeout(function(){if(!qrScanDone)switchQrEngine().catch(console.error)},4500);
-    }
+      const caps=track?.getCapabilities?.()||{};
+      if(Array.isArray(caps.focusMode)&&caps.focusMode.includes('continuous')){
+        await track.applyConstraints({advanced:[{focusMode:'continuous'}]});
+      }
+    }catch{}
+    status.textContent='Scanner ativo'+(settings.width&&settings.height?' · '+settings.width+'×'+settings.height:'')+' · aponte para o QR Code.';
   }catch(e){
-    console.error('Scanner QR',e);
+    console.error('Scanner ZXing',e);
     await stopQrScan();
     msg.textContent='Não foi possível abrir o leitor: '+(e?.message||e);
   }
 }
 document.getElementById("scan").onclick=startQrScan;
-document.getElementById("qrSwitch").onclick=function(){switchQrEngine().catch(console.error)};
 document.getElementById("qrClose").onclick=()=>stopQrScan();
 document.getElementById("continueReceipt").onclick=function(){var q=document.getElementById("qrText").value.trim();if(q)finishQrScan(q)};
 
