@@ -104,6 +104,7 @@
 <div id="linkModal" class="modal"><div class="sheet">
   <h2>Vincular esta compra</h2>
   <div class="meta">A mesma lista pode receber várias notas de mercados diferentes.</div>
+  <div id="fiscalLookupStatus" class="meta" style="margin-top:6px"></div>
   <div class="separator"></div>
   <label class="meta">Supermercado</label><input id="marketName" class="field" placeholder="Ex.: Carrefour">
   <div style="height:8px"></div>
@@ -219,34 +220,58 @@ async function finishQrScan(raw){
   document.getElementById('qrText').value=text;
   pendingReceipt=pendingReceipt||{};
   pendingReceipt.qr=text;
+  pendingReceipt.fiscal=pendingReceipt.fiscal||{};
+  pendingReceipt.fiscalLoading=true;
 
+  document.getElementById('camMsg').textContent='QR Code reconhecido.';
   const controls=qrZxingControls;qrZxingControls=null;qrZxingReader=null;
   try{controls?.stop?.()}catch{}
-  const host=document.getElementById('qrReader');
-  if(host)host.innerHTML='';
-  const status=document.getElementById('qrScanStatus');
-  status.textContent='QR reconhecido. Buscando supermercado, data e itens da nota…';
-  document.getElementById('camMsg').textContent='QR Code reconhecido. Consultando NFC-e…';
+  const host=document.getElementById('qrReader');if(host)host.innerHTML='';
+  document.getElementById('qrScanModal')?.classList.remove('on');
+  toast('QR Code reconhecido.');
+  openLinkModal();
 
+  resolveFiscalInBackground(text);
+}
+async function resolveFiscalInBackground(text){
+  var st=document.getElementById('fiscalLookupStatus');
+  if(st)st.textContent='Consultando supermercado, data, itens e tributos da NFC-e…';
   try{
     const resolved=await resolveFiscalQr(text);
+    if(!pendingReceipt||pendingReceipt.qr!==text)return;
     pendingReceipt.fiscal=resolved?.fiscal||{};
-    const f=pendingReceipt.fiscal;
-    const label=[f.establishment||f.trade_name||f.legal_name,f.date_time].filter(Boolean).join(' · ');
-    status.textContent=label?'Nota identificada: '+label:'QR lido. A consulta fiscal não trouxe todos os dados.';
+    pendingReceipt.fiscalLoading=false;
+    applyFiscalToOpenScreens();
+    var f=pendingReceipt.fiscal||{};
+    var label=[f.establishment||f.trade_name||f.legal_name,f.date_time].filter(Boolean).join(' · ');
+    if(st)st.textContent=label?'NFC-e identificada: '+label:'QR lido; alguns dados fiscais não foram encontrados.';
     document.getElementById('camMsg').textContent=label?'Nota identificada automaticamente.':'QR lido; alguns dados fiscais não foram encontrados.';
     if(resolved?.warning)console.warn('Consulta NFC-e:',resolved.warning);
-  }catch(e){
-    console.error('Consulta fiscal',e);
-    pendingReceipt.fiscal={};
-    status.textContent='QR lido, mas a consulta da NFC-e não respondeu. Você ainda pode continuar manualmente.';
+  }catch(err){
+    console.error('Consulta fiscal',err);
+    if(!pendingReceipt||pendingReceipt.qr!==text)return;
+    pendingReceipt.fiscalLoading=false;
+    if(st)st.textContent='QR lido. A consulta fiscal não respondeu; você pode continuar e tentar novamente depois.';
     document.getElementById('camMsg').textContent='QR lido; consulta fiscal indisponível.';
   }
-  setTimeout(()=>{
-    document.getElementById('qrScanModal')?.classList.remove('on');
-    toast('QR Code reconhecido.');
-    openLinkModal();
-  },220);
+}
+function applyFiscalToOpenScreens(){
+  if(!pendingReceipt)return;
+  var f=pendingReceipt.fiscal||{};
+  var market=String(f.establishment||f.trade_name||f.legal_name||'').trim();
+  var d=fiscalDateToInput(f.date_time)||'';
+  var marketEl=document.getElementById('marketName'),dateEl=document.getElementById('purchaseDate'),nameEl=document.getElementById('purchaseName');
+  if(document.getElementById('linkModal')?.classList.contains('on')){
+    if(market && (!marketEl.value || marketEl.dataset.auto==='1')){marketEl.value=market;marketEl.dataset.auto='1'}
+    if(d && (!dateEl.value || dateEl.dataset.auto==='1')){dateEl.value=d;dateEl.dataset.auto='1'}
+    if((market||d) && (!nameEl.value || nameEl.dataset.auto==='1')){nameEl.value=(market||'Compra')+' - '+fmtDate(d||dateEl.value||today());nameEl.dataset.auto='1'}
+  }
+  if(document.getElementById('detailModal')?.classList.contains('on')){
+    if(market)document.getElementById('detailMarket').value=market;
+    if(d)document.getElementById('detailDate').value=d;
+    var txt=fiscalItemsText(f);if(txt)document.getElementById('receiptItems').value=txt;
+    renderFiscalDetails();
+  }
 }
 async function startQrScan(){
   const status=document.getElementById('qrScanStatus');
@@ -300,13 +325,15 @@ document.getElementById("qrClose").onclick=()=>stopQrScan();
 document.getElementById("continueReceipt").onclick=function(){var q=document.getElementById("qrText").value.trim();if(!q)return toast("Escaneie ou informe o QR primeiro.");pendingReceipt=pendingReceipt||{};pendingReceipt.qr=q;openLinkModal()};
 
 function openLinkModal(){
-  stopQrScan().catch(()=>{});
   var f=pendingReceipt?.fiscal||{};
   var d=fiscalDateToInput(f.date_time)||today();
   var market=String(f.establishment||f.trade_name||f.legal_name||"").trim();
-  document.getElementById("purchaseDate").value=d;
-  document.getElementById("marketName").value=market;
-  document.getElementById("purchaseName").value=(market||"Compra")+" - "+fmtDate(d);
+  var marketEl=document.getElementById("marketName"),dateEl=document.getElementById("purchaseDate"),nameEl=document.getElementById("purchaseName");
+  marketEl.value=market;marketEl.dataset.auto="1";
+  dateEl.value=d;dateEl.dataset.auto="1";
+  nameEl.value=(market||"Compra")+" - "+fmtDate(d);nameEl.dataset.auto="1";
+  var st=document.getElementById("fiscalLookupStatus");
+  st.textContent=pendingReceipt?.fiscalLoading?"Consultando supermercado, data, itens e tributos da NFC-e…":(market||f.date_time?"Dados da NFC-e identificados.":"");
   var sel=document.getElementById("listLink");
   sel.innerHTML="<option value=''>Compra avulsa</option>";
   openLists().forEach(function(l){var o=document.createElement("option");o.value=l.id;o.textContent=l.name;sel.appendChild(o)});
@@ -314,8 +341,11 @@ function openLinkModal(){
   creatingList=false;
   document.getElementById("createListBox").classList.add("hidden");
   document.getElementById("linkModal").classList.add("on");
-}function suggestName(){var m=document.getElementById("marketName").value.trim()||"Compra",d=document.getElementById("purchaseDate").value;document.getElementById("purchaseName").value=m+" - "+fmtDate(d)}
-document.getElementById("marketName").addEventListener("input",suggestName);document.getElementById("purchaseDate").addEventListener("change",suggestName);
+}
+function suggestName(){var m=document.getElementById("marketName").value.trim()||"Compra",d=document.getElementById("purchaseDate").value;document.getElementById("purchaseName").value=m+" - "+fmtDate(d)}
+document.getElementById("marketName").addEventListener("input",function(){this.dataset.auto="0";document.getElementById("purchaseName").dataset.auto="0";suggestName()});
+document.getElementById("purchaseDate").addEventListener("change",function(){this.dataset.auto="0";document.getElementById("purchaseName").dataset.auto="0";suggestName()});
+document.getElementById("purchaseName").addEventListener("input",function(){this.dataset.auto="0"});
 document.getElementById("newListChoice").onclick=function(){creatingList=!creatingList;document.getElementById("createListBox").classList.toggle("hidden",!creatingList)};
 document.getElementById("cancelLink").onclick=function(){document.getElementById("linkModal").classList.remove("on")};
 document.getElementById("confirmLink").onclick=function(){
@@ -400,7 +430,7 @@ document.getElementById("compare").onclick=function(){if(!pendingReceipt)return;
 function reconcilePreview(l,rec){var used={},matched=[];var candidates=l.items.filter(function(i){return (Number(i.boughtQty)||0)<(Number(i.qty)||1)&&!i.skipReason});candidates.forEach(function(li){var best=-1,bs=0;rec.forEach(function(r,i){if(used[i])return;var s=score(li.name,r.name);if(s>bs){bs=s;best=i}});if(best>=0&&bs>=.5){used[best]=1;matched.push({itemId:li.id,listName:li.name,planned:li.qty,already:li.boughtQty||0,rec:rec[best],score:bs})}});return{matched:matched,missing:candidates.filter(function(li){return !matched.some(function(m){return m.itemId===li.id})}),extra:rec.filter(function(r,i){return !used[i]})}}
 function showRecon(r){var w=document.getElementById("recon");function block(t,c,a,f){var h="<div class='blockx'><b class='"+c+"'>"+t+" ("+a.length+")</b>";a.forEach(function(x){h+="<div class='meta' style='margin-top:6px'>"+f(x)+"</div>"});return h+"</div>"}w.innerHTML=block("Da lista e encontrados","ok",r.matched,function(m){return esc(m.listName)+" ← "+esc(m.rec.name)+" · qtd "+m.rec.qty})+block("Ainda faltando","warn",r.missing,function(x){return esc(x.name)})+block("Comprados fora da lista","badtext",r.extra,function(x){return esc(x.name)+" · R$ "+x.total.toFixed(2).replace(".",",")})}
 document.getElementById("savePurchase").onclick=function(){if(!pendingReceipt)return;pendingReceipt.market=document.getElementById("detailMarket").value.trim();pendingReceipt.date=document.getElementById("detailDate").value||today();pendingReceipt.name=document.getElementById("detailName").value.trim()||pendingReceipt.name;pendingReceipt.items=parseItems(document.getElementById("receiptItems").value);var l=state.lists.find(function(x){return x.id===pendingReceipt.listId});if(l){pendingReceipt.listName=l.name;if(!pendingReceipt.recon)pendingReceipt.recon=reconcilePreview(l,pendingReceipt.items);pendingReceipt.recon.matched.forEach(function(m){var it=l.items.find(function(x){return x.id===m.itemId});if(it){it.boughtQty=(Number(it.boughtQty)||0)+(Number(m.rec.qty)||1);it.skipReason=""}});l.purchases=l.purchases||[];l.purchases.push(JSON.parse(JSON.stringify(pendingReceipt)));state.current=l.id}else{state.standalonePurchases=state.standalonePurchases||[];state.standalonePurchases.push(JSON.parse(JSON.stringify(pendingReceipt)))}save();document.getElementById("detailModal").classList.remove("on");document.getElementById("qrText").value="";pendingReceipt=null;if(l)page("list");else page("history");toast("Compra salva.")};
-window.addEventListener("beforeunload",()=>{stopQrScan().catch(()=>{})});render();
+window.addEventListener("beforeunload",()=>{stopQrScan().catch(()=>{})});render();loadZxingScanner().catch(()=>{});
 })();
 </script>
 </body></html>
