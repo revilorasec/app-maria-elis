@@ -1,5 +1,5 @@
 {
-  "version": "0.3.4",
-  "build": "2026.09.20.4",
-  "notes": "Abrir/excluir notas, editar itens, observações, fotos e lista global de compras"
+  "version": "0.4.0",
+  "build": "2026.09.20.5",
+  "notes": "Produtos com preço médio e histórico, estabelecimentos com mapa e recomendação de onde comprar a lista"
 }
