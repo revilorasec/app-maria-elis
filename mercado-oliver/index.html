@@ -33,7 +33,47 @@
 .fiscal-cell.wide{grid-column:1/-1}
 .tax-note{font-size:10px;color:#7a6100;background:#fff9df;border:1px solid #eadc9e;border-radius:10px;padding:8px;margin-top:8px;line-height:1.4}
 .ocr-status{font-size:11px;color:var(--muted);margin-top:8px}
-@media(max-width:520px){.fiscal-grid{grid-template-columns:1fr}}.app-tools{display:flex;gap:7px;align-items:center;flex-wrap:wrap;margin:-4px 0 12px}
+@media(max-width:520px){.fiscal-grid{grid-template-columns:1fr}}
+.receipt-sheet{max-width:620px}
+.receipt-top{display:flex;align-items:flex-start;gap:10px}
+.receipt-top .grow{min-width:0}
+.close-x{width:38px;height:38px;min-height:38px;border-radius:50%;padding:0;font-size:20px}
+.receipt-summary{margin-top:8px;background:#eaf8f1;border:1px solid #cce9da;border-radius:13px;padding:10px 11px}
+.receipt-summary b{display:block;font-size:13px;color:#145f40}
+.receipt-summary span{display:block;margin-top:3px;font-size:11px;color:#547064;line-height:1.45}
+.receipt-section{margin-top:15px}
+.receipt-items-head{display:flex;align-items:flex-end;justify-content:space-between;gap:10px;margin-bottom:7px}
+.receipt-items-head h2{margin:0}
+.receipt-total{font-weight:800;color:var(--g);white-space:nowrap}
+.note-item{display:grid;grid-template-columns:30px minmax(0,1fr) auto;gap:9px;align-items:start;padding:11px 4px;border-bottom:1px solid #edf1ee}
+.note-item:last-child{border-bottom:0}
+.note-check{width:23px;height:23px;margin-top:2px;accent-color:var(--g)}
+.note-name{font-weight:750;font-size:13px;line-height:1.3}
+.note-sub{font-size:11px;color:var(--muted);margin-top:3px;line-height:1.35}
+.note-price{font-size:12px;font-weight:800;color:var(--g);white-space:nowrap;text-align:right}
+.match-badge{display:inline-block;margin-top:5px;border-radius:999px;padding:4px 7px;font-size:10px;font-weight:750}
+.match-ok{background:#e7f6ed;color:#147247}
+.match-extra{background:#fff2dd;color:#9a6100}
+.match-avulsa{background:#eef2f6;color:#586775}
+.missing-box{background:#fffaf0;border:1px solid #efdcae;border-radius:14px;padding:10px;margin-top:10px}
+.missing-row{display:flex;gap:8px;align-items:center;padding:8px 0;border-bottom:1px solid #f1e7cc}
+.missing-row:last-child{border-bottom:0}
+.missing-row .field{min-height:38px;padding:7px 9px;font-size:12px}
+.purchase-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.purchase-grid .wide{grid-column:1/-1}
+.compact-field label{display:block;font-size:10px;color:var(--muted);margin:0 0 4px}
+.compact-field .field{min-height:42px}
+.fiscal-fold{border:1px solid var(--line);border-radius:14px;background:#fff;margin-top:12px;overflow:hidden}
+.fiscal-fold summary{cursor:pointer;padding:12px 13px;font-weight:750;font-size:13px;list-style:none}
+.fiscal-fold summary::-webkit-details-marker{display:none}
+.fiscal-fold summary:after{content:"▾";float:right;color:var(--muted)}
+.fiscal-fold[open] summary:after{content:"▴"}
+.fiscal-fold .fiscal-card{margin:0;border:0;border-top:1px solid var(--line);border-radius:0}
+.manual-fold{margin-top:8px}
+.manual-fold summary{font-size:11px;color:var(--muted);cursor:pointer}
+.item-discount{font-size:10px;color:#8a6500;margin-top:2px}
+@media(max-width:520px){.purchase-grid{grid-template-columns:1fr}.purchase-grid .wide{grid-column:auto}.note-item{grid-template-columns:28px minmax(0,1fr) auto}}
+.app-tools{display:flex;gap:7px;align-items:center;flex-wrap:wrap;margin:-4px 0 12px}
 .app-version{font-size:11px;color:var(--muted);background:#eef3ef;border:1px solid var(--line);padding:6px 8px;border-radius:999px}
 .app-tools .btn{min-height:34px;padding:6px 9px;font-size:11px}
 .app-update{display:none;gap:10px;align-items:center;justify-content:space-between;background:#fff8d9;border:1px solid #ead67a;border-radius:14px;padding:10px 11px;margin:0 0 12px}
@@ -47,7 +87,7 @@
 <div class="app">
   <div class="top"><div class="logo">MO</div><div><b>Mercado Oliver</b><small>App de testes · atualizável no celular</small></div></div>
 <div class="app-tools">
-  <span id="versionLabel" class="app-version">v0.2.1</span>
+  <span id="versionLabel" class="app-version">v0.3.0</span>
   <button id="installAppBtn" class="btn soft">Instalar app</button>
   <button id="checkUpdateBtn" class="btn">Verificar atualização</button>
 </div>
@@ -140,35 +180,64 @@
   <button id="cancelLink" class="btn block" style="margin-top:8px">Cancelar</button>
 </div></div>
 
-<div id="detailModal" class="modal"><div class="sheet">
-  <h2 id="detailTitle">Detalhes da compra</h2>
-  <div id="detailLookupStatus" class="banner">QR reconhecido. Buscando dados da nota…</div>
-  <button id="retryFiscalBtn" class="btn soft block" style="margin-top:8px">Tentar buscar dados da NFC-e novamente</button>
-  <div style="height:10px"></div>
-  <label class="meta">Esta compra faz parte de qual lista?</label>
-  <select id="detailListLink" class="field"><option value="">Compra avulsa</option></select>
-  <div id="detailNewListBox" class="hidden" style="margin-top:8px">
-    <div class="row mobile-stack"><input id="detailNewListName" class="field grow" placeholder="Nome da nova lista"><button id="createDetailList" class="btn primary">Criar e vincular</button></div>
+<div id="detailModal" class="modal"><div class="sheet receipt-sheet">
+  <div class="receipt-top">
+    <div class="grow"><h2 id="detailTitle">Nova compra</h2><div id="receiptSummary" class="receipt-summary"></div></div>
+    <button id="cancelDetailTop" class="btn close-x" aria-label="Fechar">×</button>
   </div>
-  <button id="detailNewListChoice" class="btn soft" style="margin-top:8px">＋ Criar nova lista</button>
-  <div class="separator"></div>
-  <div class="split"><div><label class="meta">Supermercado</label><input id="detailMarket" class="field"></div><div><label class="meta">Data</label><input id="detailDate" class="field" type="date"></div></div>
-  <div style="height:8px"></div><label class="meta">Nome da compra</label><input id="detailName" class="field">
-  <div class="separator"></div>
-  <h2>Dados fiscais da NFC-e</h2>
-  <div id="fiscalDetails" class="fiscal-card"></div>
-  <div class="separator"></div>
-  <h2>Foto da nota</h2>
-  <label class="btn soft">Adicionar foto<input id="receiptPhoto" type="file" accept="image/*" capture="environment" hidden></label>
-  <div id="photoOcrStatus" class="ocr-status"></div>
-  <div id="photoGrid" class="receipt-photo-grid"></div>
-  <div class="separator"></div>
-  <h2>Itens da NFC-e</h2>
-  <div class="banner">Os itens encontrados na NFC-e são preenchidos automaticamente. Se algum item não vier da SEFAZ, você pode complementar ou corrigir antes de comparar com a lista.</div>
-  <textarea id="receiptItems" class="field" rows="7" style="margin-top:8px" placeholder="Leite Integral 1L | 2 | 11,98"></textarea>
-  <div class="row" style="margin-top:8px"><button id="demo" class="btn">Exemplo</button><button id="compare" class="btn primary grow">Comparar com a lista</button></div>
-  <div id="recon" style="margin-top:10px"></div>
-  <button id="savePurchase" class="btn primary block" style="margin-top:12px">Salvar esta compra</button>
+  <div id="detailLookupStatus" class="banner" style="margin-top:10px">QR reconhecido. Buscando dados da nota…</div>
+  <button id="retryFiscalBtn" class="btn soft block" style="margin-top:8px">Tentar buscar dados da NFC-e novamente</button>
+
+  <div class="receipt-section">
+    <label class="meta">Esta compra faz parte de qual lista?</label>
+    <select id="detailListLink" class="field"><option value="">Compra avulsa</option></select>
+    <div id="detailNewListBox" class="hidden" style="margin-top:8px">
+      <div class="row mobile-stack"><input id="detailNewListName" class="field grow" placeholder="Nome da nova lista"><button id="createDetailList" class="btn primary">Criar e vincular</button></div>
+    </div>
+    <button id="detailNewListChoice" class="btn soft" style="margin-top:8px">＋ Criar nova lista</button>
+  </div>
+
+  <div class="receipt-section">
+    <div class="receipt-items-head">
+      <div><h2>Itens da nota</h2><div id="receiptItemsCount" class="meta"></div></div>
+      <div id="receiptItemsTotal" class="receipt-total"></div>
+    </div>
+    <div id="receiptItemsList" class="card" style="padding:6px 11px"></div>
+    <details class="manual-fold">
+      <summary>Corrigir itens manualmente</summary>
+      <textarea id="receiptItems" class="field" rows="6" style="margin-top:8px" placeholder="Produto | quantidade | valor total"></textarea>
+    </details>
+  </div>
+
+  <div id="missingSection" class="receipt-section hidden">
+    <h2>Itens da lista ainda não comprados</h2>
+    <div id="missingListItems" class="missing-box"></div>
+  </div>
+
+  <div class="receipt-section">
+    <h2>Dados da compra</h2>
+    <div class="purchase-grid">
+      <div class="compact-field wide"><label>Supermercado</label><input id="detailMarket" class="field"></div>
+      <div class="compact-field wide"><label>Endereço</label><input id="detailAddress" class="field"></div>
+      <div class="compact-field"><label>Valor</label><input id="detailValue" class="field" inputmode="decimal"></div>
+      <div class="compact-field"><label>Data</label><input id="detailDate" class="field" type="date"></div>
+      <div class="compact-field wide"><label>Nome desta compra</label><input id="detailName" class="field"></div>
+    </div>
+  </div>
+
+  <details class="fiscal-fold">
+    <summary>Detalhes da nota fiscal</summary>
+    <div id="fiscalDetails" class="fiscal-card"></div>
+  </details>
+
+  <div class="receipt-section">
+    <h2>Foto da nota fiscal</h2>
+    <label class="btn soft">Adicionar foto<input id="receiptPhoto" type="file" accept="image/*" capture="environment" hidden></label>
+    <div id="photoOcrStatus" class="ocr-status"></div>
+    <div id="photoGrid" class="receipt-photo-grid"></div>
+  </div>
+
+  <button id="savePurchase" class="btn primary block" style="margin-top:16px">Salvar esta compra</button>
   <button id="cancelDetail" class="btn block" style="margin-top:8px">Cancelar</button>
 </div></div>
 
@@ -183,7 +252,7 @@
 
 <script>
 (function(){
-var APP_VERSION="0.2.1";
+var APP_VERSION="0.3.0";
 var FISCAL_API="https://dumoqktblhultwxmckbd.supabase.co/functions/v1/mercado-fiscal-qr";
 var SUPABASE_ANON="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR1bW9xa3RibGh1bHR3eG1ja2JkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM4OTYzODQsImV4cCI6MjA5OTQ3MjM4NH0.7JXoeer17mPw9A4i6yJBTwTn0pBNL0FUkkBed9Y4qmg";
 var KEY="mercado_oliver_v3",qrZxingControls=null,qrZxingReader=null,qrScanDone=false,pendingReceipt=null,lastPage="home",creatingList=false;
@@ -289,7 +358,7 @@ async function resolveFiscalInBackground(text){
     pendingReceipt.fiscalLoading=false;
     applyFiscalToOpenScreens();
     var ff=pendingReceipt.fiscal||{};
-    var market=ff.establishment||ff.trade_name||ff.legal_name||'';
+    var market=bestMarketName(ff);
     var parts=[market,ff.date_time,ff.value!=null?moneyBR(ff.value):''].filter(Boolean);
     if(st){st.textContent=parts.length?'Nota identificada: '+parts.join(' · '):'A NFC-e respondeu, mas não trouxe todos os campos. Os dados da chave foram mantidos.';st.className='banner'}
     document.getElementById('camMsg').textContent='Nota fiscal reconhecida.';
@@ -308,15 +377,23 @@ async function resolveFiscalInBackground(text){
 function applyFiscalToOpenScreens(){
   if(!pendingReceipt)return;
   var f=pendingReceipt.fiscal||{};
-  var market=String(f.establishment||f.trade_name||f.legal_name||'').trim();
+  var market=bestMarketName(f);
   var d=fiscalDateToInput(f.date_time)||'';
   var marketEl=document.getElementById('detailMarket');
+  var addressEl=document.getElementById('detailAddress');
+  var valueEl=document.getElementById('detailValue');
   var dateEl=document.getElementById('detailDate');
   var nameEl=document.getElementById('detailName');
   var itemsEl=document.getElementById('receiptItems');
 
-  if(market&&marketEl&&(!marketEl.value||marketEl.dataset.auto==='1')){
+  if(market&&marketEl&&(!marketEl.value||marketEl.dataset.auto==='1'||badMarketName(marketEl.value))){
     marketEl.value=market;marketEl.dataset.auto='1';pendingReceipt.market=market;
+  }
+  if(f.address&&addressEl&&(!addressEl.value||addressEl.dataset.auto==='1')){
+    addressEl.value=f.address;addressEl.dataset.auto='1';
+  }
+  if(f.value!=null&&valueEl&&(!valueEl.value||valueEl.dataset.auto==='1')){
+    valueEl.value=Number(f.value).toFixed(2).replace('.',',');valueEl.dataset.auto='1';
   }
   if(d&&dateEl&&(!dateEl.value||dateEl.dataset.auto==='1')){
     dateEl.value=d;dateEl.dataset.auto='1';pendingReceipt.date=d;
@@ -330,6 +407,7 @@ function applyFiscalToOpenScreens(){
   if(txt&&itemsEl&&(!itemsEl.value||itemsEl.dataset.auto==='1')){
     itemsEl.value=txt;itemsEl.dataset.auto='1';
   }
+  renderReceiptScreen();
   renderFiscalDetails();
 }
 async function stopQrScan(){
@@ -470,13 +548,48 @@ document.getElementById("confirmLink").onclick=function(){
   var link=document.getElementById("listLink").value;if(creatingList){var n=document.getElementById("newListFromReceipt").value.trim();if(!n)return toast("Digite o nome da nova lista.");link=createList(n).id}
   pendingReceipt=pendingReceipt||{};pendingReceipt.id=uid();pendingReceipt.market=document.getElementById("marketName").value.trim();pendingReceipt.date=document.getElementById("purchaseDate").value||today();pendingReceipt.name=document.getElementById("purchaseName").value.trim()||"Compra - "+fmtDate(pendingReceipt.date);pendingReceipt.listId=link||null;pendingReceipt.photos=[];pendingReceipt.items=[];pendingReceipt.recon=null;document.getElementById("linkModal").classList.remove("on");openDetail()
 };
+function badMarketName(v){
+  var s=String(v||"").replace(/\s+/g," ").trim();
+  if(!s)return true;
+  return /^(?:CNPJ|CPF|EMITENTE|ESTABELECIMENTO|RAZ[AÃ]O SOCIAL|NOME EMPRESARIAL)\s*:?$/i.test(s)
+    || /^(?:DOCUMENTO AUXILIAR|NFC-?E|NF-?E|CONSULTA|SEFAZ|SECRETARIA|FAZENDA)\b/i.test(s);
+}
+function bestMarketName(f){
+  f=f||{};
+  var candidates=[f.trade_name,f.establishment,f.legal_name];
+  for(var i=0;i<candidates.length;i++){var v=String(candidates[i]||"").trim();if(v&&!badMarketName(v))return v}
+  return "";
+}
+function shortFiscalDate(v){
+  var s=String(v||"").trim(),m=s.match(/(\d{2}\/\d{2}\/\d{4})(?:\s+(\d{2}:\d{2})(?::\d{2})?)?/);
+  return m?m[1]+(m[2]?" · "+m[2]:""):s;
+}
+function fiscalRows(f){
+  var rows=Array.isArray(f?.item_details)?f.item_details:[];
+  return rows.map(function(x,i){
+    var q=Number(x.quantity);if(!Number.isFinite(q)||q<=0)q=1;
+    var total=Number(x.net_value!=null?x.net_value:x.total_value);
+    if(!Number.isFinite(total))total=0;
+    var uv=Number(x.unit_value);if(!Number.isFinite(uv))uv=q?total/q:0;
+    return {
+      index:i,
+      code:String(x.code||""),
+      name:String(x.description||"Item "+(i+1)).trim(),
+      qty:q,
+      unit:String(x.unit||"").trim(),
+      unit_value:uv,
+      total:total,
+      discount:Number(x.discount||0)||0
+    };
+  });
+}
 function moneyBR(v){var n=Number(v);return Number.isFinite(n)?n.toLocaleString("pt-BR",{style:"currency",currency:"BRL"}):"—"}
 function formatDoc(v){var d=String(v||"").replace(/\D/g,"");if(d.length===14)return d.slice(0,2)+"."+d.slice(2,5)+"."+d.slice(5,8)+"/"+d.slice(8,12)+"-"+d.slice(12);if(d.length===11)return d.slice(0,3)+"."+d.slice(3,6)+"."+d.slice(6,9)+"-"+d.slice(9);return v||"—"}
 function renderFiscalDetails(){
   var host=document.getElementById("fiscalDetails");if(!host)return;
   var f=pendingReceipt?.fiscal||{},cells=[];
   function add(label,value,wide){if(value===null||value===undefined||value==="")return;cells.push("<div class='fiscal-cell"+(wide?" wide":"")+"'><small>"+esc(label)+"</small><b>"+esc(value)+"</b></div>")}
-  add("Estabelecimento",f.establishment||f.trade_name||f.legal_name,true);
+  add("Estabelecimento",bestMarketName(f),true);
   add("Razão social",f.legal_name,true);
   add("CNPJ",f.cnpj?formatDoc(f.cnpj):"");
   add("UF da chave",f.uf_code||"");
@@ -529,55 +642,148 @@ async function ocrReceiptPhoto(file){
   }catch(e){console.warn("OCR nota",e);st.textContent="Foto salva. A leitura automática da foto não conseguiu concluir."}
 }
 function populateDetailListSelector(){
-  var sel=document.getElementById("detailListLink");
-  if(!sel)return;
+  var sel=document.getElementById("detailListLink");if(!sel)return;
   sel.innerHTML="<option value=''>Compra avulsa</option>";
   openLists().forEach(function(l){var o=document.createElement("option");o.value=l.id;o.textContent=l.name;sel.appendChild(o)});
   sel.value=pendingReceipt?.listId||"";
 }
+function currentReceiptRows(){
+  if(!pendingReceipt)return[];
+  var rows=fiscalRows(pendingReceipt.fiscal||{});
+  if(rows.length)return rows;
+  if(Array.isArray(pendingReceipt.manualItems)&&pendingReceipt.manualItems.length)return pendingReceipt.manualItems.map(function(x,i){return{index:i,code:x.code||"",name:x.name,qty:x.qty||1,unit:x.unit||"",unit_value:x.unit_value||0,total:x.total||0,discount:x.discount||0}});
+  return parseItems(document.getElementById("receiptItems")?.value||"").map(function(x,i){return{index:i,code:"",name:x.name,qty:x.qty||1,unit:"",unit_value:(x.qty?x.total/x.qty:0),total:x.total||0,discount:0}});
+}
+function receiptItemKey(x,i){return String(x.code||"")+"|"+String(x.name||"")+"|"+i}
+function ensureReceiptSelection(rows){
+  pendingReceipt.itemSelection=pendingReceipt.itemSelection||{};
+  rows.forEach(function(x,i){var k=receiptItemKey(x,i);if(!(k in pendingReceipt.itemSelection))pendingReceipt.itemSelection[k]=true});
+}
+function selectedReceiptRows(){
+  var rows=currentReceiptRows();ensureReceiptSelection(rows);
+  return rows.filter(function(x,i){return pendingReceipt.itemSelection[receiptItemKey(x,i)]!==false});
+}
+function toReconRows(rows){return rows.map(function(x,i){return{name:x.name,qty:x.qty,total:x.total,index:i,unit:x.unit,unit_value:x.unit_value,discount:x.discount,code:x.code}})}
+function reconcilePreview(l,rec){
+  var used={},matched=[];
+  var candidates=l.items.filter(function(i){return (Number(i.boughtQty)||0)<(Number(i.qty)||1)&&!i.skipReason});
+  candidates.forEach(function(li){
+    var best=-1,bs=0;
+    rec.forEach(function(r,i){if(used[i])return;var s=score(li.name,r.name);if(s>bs){bs=s;best=i}});
+    if(best>=0&&bs>=.5){used[best]=1;matched.push({itemId:li.id,listName:li.name,planned:li.qty,already:li.boughtQty||0,rec:rec[best],recIndex:best,score:bs})}
+  });
+  return{matched:matched,missing:candidates.filter(function(li){return !matched.some(function(m){return m.itemId===li.id})}),extra:rec.filter(function(r,i){return !used[i]}).map(function(r){return r})}
+}
+function currentReconciliation(){
+  var l=state.lists.find(function(x){return x.id===pendingReceipt?.listId});
+  if(!l)return null;
+  var rec=toReconRows(selectedReceiptRows());
+  var r=reconcilePreview(l,rec);pendingReceipt.recon=r;return r;
+}
+function renderReceiptSummary(){
+  var host=document.getElementById("receiptSummary");if(!host||!pendingReceipt)return;
+  var f=pendingReceipt.fiscal||{},market=bestMarketName(f)||pendingReceipt.market||"Nota fiscal";
+  var rows=currentReceiptRows(),count=f.item_count||rows.length,total=f.value!=null?f.value:rows.reduce(function(a,x){return a+Number(x.total||0)},0);
+  var details=[formatDoc(f.cnpj||""),count?count+" item(ns)":"",Number.isFinite(Number(total))?moneyBR(total):"",shortFiscalDate(f.date_time||"")].filter(Boolean);
+  host.innerHTML="<b>Nota lida: "+esc(market)+"</b><span>"+details.map(esc).join(" · ")+"</span>";
+}
+function renderReceiptItems(){
+  var host=document.getElementById("receiptItemsList"),countEl=document.getElementById("receiptItemsCount"),totalEl=document.getElementById("receiptItemsTotal");
+  if(!host||!pendingReceipt)return;
+  var rows=currentReceiptRows();ensureReceiptSelection(rows);
+  var selected=selectedReceiptRows(),l=state.lists.find(function(x){return x.id===pendingReceipt.listId}),recon=currentReconciliation();
+  var matchedIndexes=new Set((recon?.matched||[]).map(function(m){return m.recIndex}));
+  countEl.textContent=selected.length+" de "+rows.length+" selecionados";
+  totalEl.textContent=moneyBR(selected.reduce(function(a,x){return a+Number(x.total||0)},0));
+  host.innerHTML="";
+  if(!rows.length){host.innerHTML="<div class='meta' style='padding:10px'>Nenhum item foi retornado pela NFC-e ainda.</div>";return}
+  rows.forEach(function(x,i){
+    var key=receiptItemKey(x,i),checked=pendingReceipt.itemSelection[key]!==false;
+    var d=document.createElement("div");d.className="note-item";
+    var badge=!l?"<span class='match-badge match-avulsa'>Compra avulsa</span>":(checked&&matchedIndexes.has(i)?"<span class='match-badge match-ok'>✓ Estava na lista</span>":"<span class='match-badge match-extra'>+ Fora da lista</span>");
+    var q=String(x.qty).replace(".",","),unit=x.unit?" "+esc(x.unit):"",unitTxt=x.unit_value?moneyBR(x.unit_value):"";
+    d.innerHTML="<input class='note-check' type='checkbox' "+(checked?"checked":"")+"><div><div class='note-name'>"+esc(x.name)+"</div><div class='note-sub'>"+q+unit+(unitTxt?" × "+unitTxt:"")+(x.code?" · cód. "+esc(x.code):"")+"</div>"+(x.discount>0?"<div class='item-discount'>Desconto: "+moneyBR(x.discount)+"</div>":"")+badge+"</div><div class='note-price'>"+moneyBR(x.total)+"</div>";
+    d.querySelector("input").onchange=function(){pendingReceipt.itemSelection[key]=this.checked;renderReceiptScreen()};
+    host.appendChild(d);
+  });
+}
+function renderMissingItems(){
+  var sec=document.getElementById("missingSection"),host=document.getElementById("missingListItems");
+  if(!sec||!host||!pendingReceipt)return;
+  var l=state.lists.find(function(x){return x.id===pendingReceipt.listId}),r=currentReconciliation();
+  if(!l||!r||!r.missing.length){sec.classList.add("hidden");host.innerHTML="";return}
+  sec.classList.remove("hidden");host.innerHTML="";
+  r.missing.forEach(function(it){
+    var row=document.createElement("div");row.className="missing-row";
+    var wrap=document.createElement("div");wrap.className="grow";wrap.innerHTML="<b style='font-size:12px'>"+esc(it.name)+"</b><div class='meta'>Ainda não apareceu nas notas desta lista.</div>";
+    var sel=document.createElement("select");sel.className="field";sel.style.maxWidth="190px";
+    sel.innerHTML="<option value=''>Pendente</option>"+reasons.map(function(x){return"<option value='"+esc(x)+"'>"+esc(x)+"</option>"}).join("");
+    sel.value=it.skipReason||"";
+    sel.onchange=function(){var real=l.items.find(function(x){return x.id===it.id});if(real){real.skipReason=sel.value;localStorage.setItem(KEY,JSON.stringify(state));renderReceiptScreen()}};
+    row.appendChild(wrap);row.appendChild(sel);host.appendChild(row);
+  });
+}
+function renderReceiptScreen(){
+  if(!pendingReceipt)return;
+  renderReceiptSummary();
+  renderReceiptItems();
+  renderMissingItems();
+  renderFiscalDetails();
+}
 function openDetail(){
-  var f=pendingReceipt?.fiscal||{};
-  var modal=document.getElementById("detailModal");
-  modal.classList.add("on");
-  document.getElementById("detailTitle").textContent=pendingReceipt.name||"Detalhes da compra";
-  var marketEl=document.getElementById("detailMarket"),dateEl=document.getElementById("detailDate"),nameEl=document.getElementById("detailName"),itemsEl=document.getElementById("receiptItems");
+  var f=pendingReceipt?.fiscal||{},modal=document.getElementById("detailModal");modal.classList.add("on");
+  var market=bestMarketName(f)||pendingReceipt.market||"",d=fiscalDateToInput(f.date_time)||pendingReceipt.date||today();
+  pendingReceipt.market=market||pendingReceipt.market||"";pendingReceipt.date=d;
+  var marketEl=document.getElementById("detailMarket"),addressEl=document.getElementById("detailAddress"),valueEl=document.getElementById("detailValue"),dateEl=document.getElementById("detailDate"),nameEl=document.getElementById("detailName"),itemsEl=document.getElementById("receiptItems");
   marketEl.value=pendingReceipt.market||"";marketEl.dataset.auto="1";
-  dateEl.value=pendingReceipt.date||today();dateEl.dataset.auto="1";
-  nameEl.value=pendingReceipt.name||("Compra - "+fmtDate(pendingReceipt.date||today()));nameEl.dataset.auto="1";
+  addressEl.value=f.address||"";addressEl.dataset.auto="1";
+  valueEl.value=f.value!=null?Number(f.value).toFixed(2).replace(".",","):"";valueEl.dataset.auto="1";
+  dateEl.value=d;dateEl.dataset.auto="1";
+  nameEl.value=pendingReceipt.name||((market||"Compra")+" - "+fmtDate(d));nameEl.dataset.auto="1";
   itemsEl.value=fiscalItemsText(f);itemsEl.dataset.auto="1";
-  document.getElementById("recon").innerHTML="";
   document.getElementById("photoOcrStatus").textContent="";
   document.getElementById("detailLookupStatus").textContent=pendingReceipt.fiscalLoading?"QR reconhecido. Buscando dados da nota…":"Confira os dados da compra.";
-  populateDetailListSelector();
-  renderFiscalDetails();
-  renderPhotos();
+  populateDetailListSelector();renderPhotos();renderReceiptScreen();
 }
-document.getElementById("cancelDetail").onclick=function(){document.getElementById("detailModal").classList.remove("on")};
+function closeDetail(){document.getElementById("detailModal").classList.remove("on")}
+document.getElementById("cancelDetail").onclick=closeDetail;
+document.getElementById("cancelDetailTop").onclick=closeDetail;
 document.getElementById("retryFiscalBtn").onclick=function(){if(pendingReceipt?.qr)resolveFiscalInBackground(pendingReceipt.qr)};
-document.getElementById("detailListLink").onchange=function(){if(pendingReceipt)pendingReceipt.listId=this.value||null};
+document.getElementById("detailListLink").onchange=function(){if(pendingReceipt){pendingReceipt.listId=this.value||null;renderReceiptScreen()}};
 document.getElementById("detailNewListChoice").onclick=function(){document.getElementById("detailNewListBox").classList.toggle("hidden")};
 document.getElementById("createDetailList").onclick=function(){
-  var n=document.getElementById("detailNewListName").value.trim();
-  if(!n)return toast("Digite o nome da nova lista.");
-  var l=createList(n);
-  if(pendingReceipt){pendingReceipt.listId=l.id;pendingReceipt.startedFromList=l.id}
-  populateDetailListSelector();
-  document.getElementById("detailNewListName").value="";
-  document.getElementById("detailNewListBox").classList.add("hidden");
-  toast("Lista criada e vinculada.");
+  var n=document.getElementById("detailNewListName").value.trim();if(!n)return toast("Digite o nome da nova lista.");
+  var l=createList(n);if(pendingReceipt){pendingReceipt.listId=l.id;pendingReceipt.startedFromList=l.id}
+  populateDetailListSelector();document.getElementById("detailNewListName").value="";document.getElementById("detailNewListBox").classList.add("hidden");renderReceiptScreen();toast("Lista criada e vinculada.");
 };
-document.getElementById("detailMarket").addEventListener("input",function(){this.dataset.auto="0";if(pendingReceipt)pendingReceipt.market=this.value});
-document.getElementById("detailDate").addEventListener("change",function(){this.dataset.auto="0";if(pendingReceipt)pendingReceipt.date=this.value});
+document.getElementById("detailMarket").addEventListener("input",function(){this.dataset.auto="0";if(pendingReceipt){pendingReceipt.market=this.value;renderReceiptSummary()}});
+document.getElementById("detailAddress").addEventListener("input",function(){this.dataset.auto="0";if(pendingReceipt){pendingReceipt.fiscal=pendingReceipt.fiscal||{};pendingReceipt.fiscal.address=this.value}});
+document.getElementById("detailValue").addEventListener("input",function(){this.dataset.auto="0";if(pendingReceipt){var n=Number(this.value.replace(/\./g,"").replace(",","."));if(Number.isFinite(n)){pendingReceipt.fiscal=pendingReceipt.fiscal||{};pendingReceipt.fiscal.value=n;renderReceiptSummary()}}});
+document.getElementById("detailDate").addEventListener("change",function(){this.dataset.auto="0";if(pendingReceipt){pendingReceipt.date=this.value;renderReceiptSummary()}});
 document.getElementById("detailName").addEventListener("input",function(){this.dataset.auto="0";if(pendingReceipt)pendingReceipt.name=this.value});
-document.getElementById("receiptItems").addEventListener("input",function(){this.dataset.auto="0"});
-document.getElementById("receiptPhoto").onchange=function(e){var f=e.target.files&&e.target.files[0];if(!f)return;if((pendingReceipt.photos||[]).length>=3)return toast("Máximo de 3 fotos por nota.");var fr=new FileReader();fr.onload=function(){pendingReceipt.photos=pendingReceipt.photos||[];pendingReceipt.photos.push(fr.result);renderPhotos();toast("Foto adicionada.");ocrReceiptPhoto(f)};fr.readAsDataURL(f)};
+document.getElementById("receiptItems").addEventListener("input",function(){this.dataset.auto="0";if(pendingReceipt){pendingReceipt.manualItems=parseItems(this.value);pendingReceipt.fiscal=pendingReceipt.fiscal||{};pendingReceipt.fiscal.item_details=[];pendingReceipt.itemSelection={};renderReceiptScreen()}});
+document.getElementById("receiptPhoto").onchange=function(e){var file=e.target.files&&e.target.files[0];if(!file)return;if((pendingReceipt.photos||[]).length>=3)return toast("Máximo de 3 fotos por nota.");var fr=new FileReader();fr.onload=function(){pendingReceipt.photos=pendingReceipt.photos||[];pendingReceipt.photos.push(fr.result);renderPhotos();toast("Foto adicionada.");ocrReceiptPhoto(file)};fr.readAsDataURL(file)};
 function renderPhotos(){var g=document.getElementById("photoGrid");g.innerHTML="";(pendingReceipt&&pendingReceipt.photos||[]).forEach(function(src){var i=document.createElement("img");i.src=src;g.appendChild(i)})}
-document.getElementById("demo").onclick=function(){document.getElementById("receiptItems").value="Leite Integral 1L | 2 | 11,98\nSuco de Uva Integral 1L | 1 | 14,70\nChocolate 100g | 1 | 9,90"};
-function parseItems(t){return t.split(/\n+/).map(function(x){var p=x.split("|");return{name:(p[0]||"").trim(),qty:Number((p[1]||"1").trim().replace(",","."))||1,total:Number((p[2]||"0").trim().replace(/\./g,"").replace(",","."))||0}}).filter(function(x){return x.name})}
-document.getElementById("compare").onclick=function(){if(!pendingReceipt)return;pendingReceipt.market=document.getElementById("detailMarket").value.trim();pendingReceipt.date=document.getElementById("detailDate").value;pendingReceipt.name=document.getElementById("detailName").value.trim()||pendingReceipt.name;pendingReceipt.items=parseItems(document.getElementById("receiptItems").value);var l=state.lists.find(function(x){return x.id===pendingReceipt.listId});if(!l){document.getElementById("recon").innerHTML="<div class='blockx'><b class='blue'>Compra avulsa</b><div class='meta'>"+pendingReceipt.items.length+" item(ns) serão registrados sem comparação com lista.</div></div>";return}pendingReceipt.recon=reconcilePreview(l,pendingReceipt.items);showRecon(pendingReceipt.recon)};
-function reconcilePreview(l,rec){var used={},matched=[];var candidates=l.items.filter(function(i){return (Number(i.boughtQty)||0)<(Number(i.qty)||1)&&!i.skipReason});candidates.forEach(function(li){var best=-1,bs=0;rec.forEach(function(r,i){if(used[i])return;var s=score(li.name,r.name);if(s>bs){bs=s;best=i}});if(best>=0&&bs>=.5){used[best]=1;matched.push({itemId:li.id,listName:li.name,planned:li.qty,already:li.boughtQty||0,rec:rec[best],score:bs})}});return{matched:matched,missing:candidates.filter(function(li){return !matched.some(function(m){return m.itemId===li.id})}),extra:rec.filter(function(r,i){return !used[i]})}}
-function showRecon(r){var w=document.getElementById("recon");function block(t,c,a,f){var h="<div class='blockx'><b class='"+c+"'>"+t+" ("+a.length+")</b>";a.forEach(function(x){h+="<div class='meta' style='margin-top:6px'>"+f(x)+"</div>"});return h+"</div>"}w.innerHTML=block("Da lista e encontrados","ok",r.matched,function(m){return esc(m.listName)+" ← "+esc(m.rec.name)+" · qtd "+m.rec.qty})+block("Ainda faltando","warn",r.missing,function(x){return esc(x.name)})+block("Comprados fora da lista","badtext",r.extra,function(x){return esc(x.name)+" · R$ "+x.total.toFixed(2).replace(".",",")})}
-document.getElementById("savePurchase").onclick=function(){if(!pendingReceipt)return;pendingReceipt.listId=document.getElementById("detailListLink").value||null;pendingReceipt.market=document.getElementById("detailMarket").value.trim();pendingReceipt.date=document.getElementById("detailDate").value||today();pendingReceipt.name=document.getElementById("detailName").value.trim()||pendingReceipt.name;pendingReceipt.items=parseItems(document.getElementById("receiptItems").value);var l=state.lists.find(function(x){return x.id===pendingReceipt.listId});if(l){pendingReceipt.listName=l.name;if(!pendingReceipt.recon)pendingReceipt.recon=reconcilePreview(l,pendingReceipt.items);pendingReceipt.recon.matched.forEach(function(m){var it=l.items.find(function(x){return x.id===m.itemId});if(it){it.boughtQty=(Number(it.boughtQty)||0)+(Number(m.rec.qty)||1);it.skipReason=""}});l.purchases=l.purchases||[];l.purchases.push(JSON.parse(JSON.stringify(pendingReceipt)));state.current=l.id}else{state.standalonePurchases=state.standalonePurchases||[];state.standalonePurchases.push(JSON.parse(JSON.stringify(pendingReceipt)))}save();document.getElementById("detailModal").classList.remove("on");document.getElementById("qrText").value="";pendingReceipt=null;if(l)page("list");else page("history");toast("Compra salva.")};
+function parseItems(t){return String(t||"").split(/\n+/).map(function(x){var p=x.split("|");return{name:(p[0]||"").trim(),qty:Number((p[1]||"1").trim().replace(",","."))||1,total:Number((p[2]||"0").trim().replace(/\./g,"").replace(",","."))||0}}).filter(function(x){return x.name})}
+document.getElementById("savePurchase").onclick=function(){
+  if(!pendingReceipt)return;
+  pendingReceipt.listId=document.getElementById("detailListLink").value||null;
+  pendingReceipt.market=document.getElementById("detailMarket").value.trim();
+  pendingReceipt.date=document.getElementById("detailDate").value||today();
+  pendingReceipt.name=document.getElementById("detailName").value.trim()||pendingReceipt.name;
+  var selected=selectedReceiptRows();
+  pendingReceipt.items=toReconRows(selected);
+  var l=state.lists.find(function(x){return x.id===pendingReceipt.listId});
+  if(l){
+    pendingReceipt.listName=l.name;
+    pendingReceipt.recon=reconcilePreview(l,pendingReceipt.items);
+    pendingReceipt.recon.matched.forEach(function(m){var it=l.items.find(function(x){return x.id===m.itemId});if(it){it.boughtQty=(Number(it.boughtQty)||0)+(Number(m.rec.qty)||1);it.skipReason=""}});
+    l.purchases=l.purchases||[];l.purchases.push(JSON.parse(JSON.stringify(pendingReceipt)));state.current=l.id;
+  }else{
+    state.standalonePurchases=state.standalonePurchases||[];state.standalonePurchases.push(JSON.parse(JSON.stringify(pendingReceipt)));
+  }
+  save();closeDetail();document.getElementById("qrText").value="";pendingReceipt=null;if(l)page("list");else page("history");toast("Compra salva.");
+};
 
 var deferredInstallPrompt=null,swRegistration=null,remoteAppVersion=null;
 function standaloneMode(){return window.matchMedia?.("(display-mode: standalone)")?.matches||window.navigator.standalone===true}
