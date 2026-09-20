@@ -47,8 +47,8 @@
 <div class="app">
   <div class="top"><div class="logo">MO</div><div><b>Mercado Oliver</b><small>App de testes · atualizável no celular</small></div></div>
 <div class="app-tools">
-  <span id="versionLabel" class="app-version">v0.2.0</span>
-  <button id="installAppBtn" class="btn soft hidden">Instalar app</button>
+  <span id="versionLabel" class="app-version">v0.2.1</span>
+  <button id="installAppBtn" class="btn soft">Instalar app</button>
   <button id="checkUpdateBtn" class="btn">Verificar atualização</button>
 </div>
 <div id="appUpdate" class="app-update">
@@ -143,6 +143,7 @@
 <div id="detailModal" class="modal"><div class="sheet">
   <h2 id="detailTitle">Detalhes da compra</h2>
   <div id="detailLookupStatus" class="banner">QR reconhecido. Buscando dados da nota…</div>
+  <button id="retryFiscalBtn" class="btn soft block" style="margin-top:8px">Tentar buscar dados da NFC-e novamente</button>
   <div style="height:10px"></div>
   <label class="meta">Esta compra faz parte de qual lista?</label>
   <select id="detailListLink" class="field"><option value="">Compra avulsa</option></select>
@@ -171,12 +172,18 @@
   <button id="cancelDetail" class="btn block" style="margin-top:8px">Cancelar</button>
 </div></div>
 
+<div id="installModal" class="modal"><div class="sheet">
+  <h2>Instalar Mercado Oliver</h2>
+  <div id="installInstructions" class="meta"></div>
+  <button id="closeInstallModal" class="btn block" style="margin-top:12px">Fechar</button>
+</div></div>
+
 <div class="bottom"><div class="nav"><button data-p="home" class="on">Início</button><button data-p="list">Lista</button><button data-p="receipt">Nota</button><button data-p="history">Histórico</button></div></div>
 <div id="toast" class="toast"></div>
 
 <script>
 (function(){
-var APP_VERSION="0.2.0";
+var APP_VERSION="0.2.1";
 var FISCAL_API="https://dumoqktblhultwxmckbd.supabase.co/functions/v1/mercado-fiscal-qr";
 var SUPABASE_ANON="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR1bW9xa3RibGh1bHR3eG1ja2JkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM4OTYzODQsImV4cCI6MjA5OTQ3MjM4NH0.7JXoeer17mPw9A4i6yJBTwTn0pBNL0FUkkBed9Y4qmg";
 var KEY="mercado_oliver_v3",qrZxingControls=null,qrZxingReader=null,qrScanDone=false,pendingReceipt=null,lastPage="home",creatingList=false;
@@ -238,20 +245,17 @@ async function loadZxingScanner(){
 }
 async function resolveFiscalQr(raw){
   const ctl=new AbortController();
-  const tm=setTimeout(function(){ctl.abort()},12000);
+  const tm=setTimeout(function(){ctl.abort()},15000);
   try{
     const r=await fetch(FISCAL_API,{
       method:"POST",
       signal:ctl.signal,
       cache:"no-store",
-      headers:{
-        "content-type":"application/json",
-        "apikey":SUPABASE_ANON,
-        "authorization":"Bearer "+SUPABASE_ANON
-      },
+      headers:{"content-type":"application/json"},
       body:JSON.stringify({qr:raw})
     });
-    const b=await r.json().catch(function(){return{}});
+    const txt=await r.text();
+    let b={};try{b=txt?JSON.parse(txt):{}}catch(e){b={error:txt||("HTTP "+r.status)}}
     if(!r.ok)throw Error(b.error||("Erro fiscal "+r.status));
     return b;
   }finally{clearTimeout(tm)}
@@ -274,6 +278,8 @@ function fiscalItemsText(f){
 }
 async function resolveFiscalInBackground(text){
   var st=document.getElementById('detailLookupStatus');
+  var retry=document.getElementById('retryFiscalBtn');
+  if(retry){retry.disabled=true;retry.textContent='Buscando dados…'}
   if(st){st.textContent='QR reconhecido. Buscando supermercado, data, itens, valores e tributos…';st.className='banner'}
   try{
     var resolved=await resolveFiscalQr(text);
@@ -285,7 +291,7 @@ async function resolveFiscalInBackground(text){
     var ff=pendingReceipt.fiscal||{};
     var market=ff.establishment||ff.trade_name||ff.legal_name||'';
     var parts=[market,ff.date_time,ff.value!=null?moneyBR(ff.value):''].filter(Boolean);
-    if(st){st.textContent=parts.length?'Nota identificada: '+parts.join(' · '):'Nota reconhecida. Confira os dados encontrados.';st.className='banner'}
+    if(st){st.textContent=parts.length?'Nota identificada: '+parts.join(' · '):'A NFC-e respondeu, mas não trouxe todos os campos. Os dados da chave foram mantidos.';st.className='banner'}
     document.getElementById('camMsg').textContent='Nota fiscal reconhecida.';
     if(resolved?.warning)console.warn('Consulta NFC-e:',resolved.warning);
   }catch(err){
@@ -293,8 +299,10 @@ async function resolveFiscalInBackground(text){
     if(!pendingReceipt||pendingReceipt.qr!==text)return;
     pendingReceipt.fiscalLoading=false;
     applyFiscalToOpenScreens();
-    if(st){st.textContent='QR reconhecido. Mantive os dados da chave fiscal; a consulta complementar não respondeu.';st.className='banner'}
-    document.getElementById('camMsg').textContent='QR reconhecido; consulta fiscal complementar indisponível.';
+    if(st){st.textContent='Não consegui consultar os dados completos da NFC-e: '+(err?.message||err)+'. Os dados da chave fiscal foram mantidos.';st.className='banner'}
+    document.getElementById('camMsg').textContent='QR reconhecido; consulta fiscal complementar falhou.';
+  }finally{
+    if(retry){retry.disabled=false;retry.textContent='Tentar buscar dados da NFC-e novamente'}
   }
 }
 function applyFiscalToOpenScreens(){
@@ -545,6 +553,7 @@ function openDetail(){
   renderPhotos();
 }
 document.getElementById("cancelDetail").onclick=function(){document.getElementById("detailModal").classList.remove("on")};
+document.getElementById("retryFiscalBtn").onclick=function(){if(pendingReceipt?.qr)resolveFiscalInBackground(pendingReceipt.qr)};
 document.getElementById("detailListLink").onchange=function(){if(pendingReceipt)pendingReceipt.listId=this.value||null};
 document.getElementById("detailNewListChoice").onclick=function(){document.getElementById("detailNewListBox").classList.toggle("hidden")};
 document.getElementById("createDetailList").onclick=function(){
@@ -578,22 +587,32 @@ function showUpdate(version,notes){
   if(txt)txt.textContent="Versão "+(version||"nova")+" disponível"+(notes?" · "+notes:"")+".";
   bar?.classList.add("on");
 }
+function showInstallHelp(){
+  var ua=navigator.userAgent||"",ios=/iPad|iPhone|iPod/.test(ua),android=/Android/i.test(ua);
+  var txt=document.getElementById("installInstructions");
+  if(ios)txt.innerHTML="No Safari, toque em <b>Compartilhar</b> e depois em <b>Adicionar à Tela de Início</b>.";
+  else if(android)txt.innerHTML="No Chrome ou Samsung Internet, abra o menu do navegador e escolha <b>Instalar app</b> ou <b>Adicionar à tela inicial</b>.";
+  else txt.innerHTML="Abra o menu do navegador e escolha a opção de <b>Instalar aplicativo</b> ou <b>Adicionar à tela inicial</b>.";
+  document.getElementById("installModal").classList.add("on");
+}
 async function registerMercadoPwa(){
   var installBtn=document.getElementById("installAppBtn");
+  if(standaloneMode()){installBtn.textContent="App instalado";installBtn.disabled=true}
   window.addEventListener("beforeinstallprompt",function(e){
     e.preventDefault();deferredInstallPrompt=e;
-    if(!standaloneMode())installBtn?.classList.remove("hidden");
+    if(!standaloneMode()){installBtn.textContent="Instalar app";installBtn.disabled=false}
   });
   installBtn?.addEventListener("click",async function(){
+    if(standaloneMode())return;
     if(deferredInstallPrompt){
       deferredInstallPrompt.prompt();
-      try{await deferredInstallPrompt.userChoice}catch(e){}
-      deferredInstallPrompt=null;installBtn.classList.add("hidden");
+      try{var choice=await deferredInstallPrompt.userChoice;if(choice?.outcome==="accepted"){installBtn.textContent="App instalado";installBtn.disabled=true}}catch(e){}
+      deferredInstallPrompt=null;
     }else{
-      toast("No navegador, use o menu e escolha “Adicionar à tela inicial” ou “Instalar app”.");
+      showInstallHelp();
     }
   });
-  if(standaloneMode())installBtn?.classList.add("hidden");
+  document.getElementById("closeInstallModal")?.addEventListener("click",function(){document.getElementById("installModal").classList.remove("on")});
 
   if("serviceWorker" in navigator){
     try{
