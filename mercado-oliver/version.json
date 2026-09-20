@@ -1,5 +1,5 @@
 {
-  "version": "0.3.2",
-  "build": "2026.09.20.5",
-  "notes": "Scanner NFC-e dedicado: QR-only, autofocus, moldura quadrada, luz e zoom quando suportados"
+  "version": "0.3.3",
+  "build": "2026.09.20.3",
+  "notes": "Histórico abre notas, exclusão, fotos da galeria, observações e fotos por item"
 }
