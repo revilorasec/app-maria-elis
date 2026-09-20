@@ -46,6 +46,12 @@
 .note-obs{margin-top:5px;font-size:11px;color:#56635b}
 .item-editor-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
 .item-editor-grid .wide{grid-column:1/-1}
+.bought-row{background:#fff;border:1px solid var(--line);border-radius:15px;padding:11px;margin:8px 0;cursor:pointer}
+.bought-row .bought-title{font-weight:750;font-size:13px}
+.bought-row .bought-price{font-weight:800;white-space:nowrap}
+.bought-row .meta{margin-top:3px}
+.receipt-photo-grid .photo-wrap{position:relative}
+.receipt-photo-grid .photo-wrap button{position:absolute;top:4px;right:4px;border:0;border-radius:999px;width:26px;height:26px;background:#fff;color:#a72d2d;font-weight:900;box-shadow:0 1px 6px #0003}
 @media(max-width:520px){.item-editor-grid{grid-template-columns:1fr}.item-editor-grid .wide{grid-column:auto}}
 .ocr-status{font-size:11px;color:var(--muted);margin-top:8px}
 @media(max-width:520px){.fiscal-grid{grid-template-columns:1fr}}
@@ -102,7 +108,7 @@
 <div class="app">
   <div class="top"><div class="logo">MO</div><div><b>Mercado Oliver</b><small>App de testes · atualizável no celular</small></div></div>
 <div class="app-tools">
-  <span id="versionLabel" class="app-version">v0.3.3</span>
+  <span id="versionLabel" class="app-version">v0.3.4</span>
   <button id="installAppBtn" class="btn soft">Instalar app</button>
   <button id="checkUpdateBtn" class="btn">Verificar atualização</button>
 </div>
@@ -163,7 +169,13 @@
   </section>
 
   <section id="history" class="page">
-    <h2>Histórico</h2><div id="historyList"></div>
+    <h2>Notas / compras</h2>
+    <div id="historyList"></div>
+    <div class="sec card">
+      <div class="row"><div class="grow"><h2 style="margin:0">Tudo que foi comprado</h2><div id="allBoughtCount" class="meta"></div></div></div>
+      <input id="allBoughtSearch" class="field" placeholder="Pesquisar produto comprado..." style="margin-top:8px">
+    </div>
+    <div id="allBoughtList"></div>
   </section>
 </div>
 
@@ -302,7 +314,7 @@
 
 <script>
 (function(){
-var APP_VERSION="0.3.3";
+var APP_VERSION="0.3.4";
 var FISCAL_API="https://dumoqktblhultwxmckbd.supabase.co/functions/v1/mercado-fiscal-qr";
 var SUPABASE_ANON="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR1bW9xa3RibGh1bHR3eG1ja2JkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM4OTYzODQsImV4cCI6MjA5OTQ3MjM4NH0.7JXoeer17mPw9A4i6yJBTwTn0pBNL0FUkkBed9Y4qmg";
 var KEY="mercado_oliver_v3",qrZxingControls=null,qrZxingReader=null,qrVideoTrack=null,qrScanDone=false,qrTorchOn=false,qrZoomOn=false,pendingReceipt=null,lastPage="home",creatingList=false,editingItemIndex=null;
@@ -344,8 +356,45 @@ function render(){
     l.items.forEach(function(it){var d=document.createElement("div");d.className="item";d.innerHTML="<div class='row'><div class='grow'><h3>"+esc(it.name)+"</h3><div class='meta'>Planejado: "+it.qty+" · Comprado: "+(it.boughtQty||0)+" · <b>"+esc(deriveStatus(it))+"</b></div></div></div>";var chips=document.createElement("div");chips.className="chips";if((it.boughtQty||0)<it.qty){var b=document.createElement("button");b.className="chip";b.textContent="Marcar compra manual";b.onclick=function(){it.boughtQty=Math.min(Number(it.qty)||1,(Number(it.boughtQty)||0)+1);it.skipReason="";save()};chips.appendChild(b);var s=document.createElement("select");s.className="chip";s.innerHTML="<option value=''>Não comprei...</option>"+reasons.map(function(r){return"<option>"+esc(r)+"</option>"}).join("");s.value=it.skipReason||"";s.onchange=function(){it.skipReason=s.value;save()};chips.appendChild(s)}d.appendChild(chips);items.appendChild(d)});
     var ps=document.getElementById("purchases");ps.innerHTML="";(l.purchases||[]).slice().reverse().forEach(function(p){ensurePurchaseId(p);var d=document.createElement("div");d.className="purchase";d.innerHTML="<div class='row'><div class='grow'><h3>"+esc(p.name)+"</h3><div class='meta'>"+esc(p.market||"Mercado não informado")+" · "+fmtDate(p.date)+" · "+(p.items||[]).length+" item(ns) na nota"+(p.fiscal&&p.fiscal.taxes_total!=null?" · Tributos "+moneyBR(p.fiscal.taxes_total):"")+"</div></div><span class='mini-status'>NFC-e</span></div><div class='purchase-actions'><button class='btn soft'>Abrir nota</button></div>";d.querySelector("button").onclick=function(ev){ev.stopPropagation();openSavedPurchase(p.id)};d.onclick=function(){openSavedPurchase(p.id)};ps.appendChild(d)});if(!(l.purchases||[]).length)ps.innerHTML="<div class='card meta'>Nenhuma nota vinculada ainda.</div>"
   }
-  var h=document.getElementById("historyList");h.innerHTML="";var hp=allPurchases().slice().sort(function(a,b){return String(b.date||"").localeCompare(String(a.date||""))});if(!hp.length)h.innerHTML="<div class='card meta'>Nenhuma compra registrada.</div>";hp.forEach(function(p){ensurePurchaseId(p);var d=document.createElement("div");d.className="purchase";d.innerHTML="<h3>"+esc(p.name)+"</h3><div class='meta'>"+esc(p.market||"Mercado não informado")+" · "+fmtDate(p.date)+" · "+(p.items||[]).length+" item(ns) · "+(p.listName?"Lista: "+esc(p.listName):"Compra avulsa")+(p.fiscal&&p.fiscal.taxes_total!=null?" · Tributos "+moneyBR(p.fiscal.taxes_total):"")+"</div><div class='purchase-actions'><button class='btn soft'>Abrir nota e itens</button></div>";d.querySelector("button").onclick=function(ev){ev.stopPropagation();openSavedPurchase(p.id)};d.onclick=function(){openSavedPurchase(p.id)};h.appendChild(d)})
+  var h=document.getElementById("historyList");h.innerHTML="";var hp=allPurchases().slice().sort(function(a,b){return String(b.date||"").localeCompare(String(a.date||""))});if(!hp.length)h.innerHTML="<div class='card meta'>Nenhuma compra registrada.</div>";hp.forEach(function(p){ensurePurchaseId(p);var d=document.createElement("div");d.className="purchase";d.innerHTML="<h3>"+esc(p.name)+"</h3><div class='meta'>"+esc(p.market||"Mercado não informado")+" · "+fmtDate(p.date)+" · "+(p.items||[]).length+" item(ns) · "+(p.listName?"Lista: "+esc(p.listName):"Compra avulsa")+(p.fiscal&&p.fiscal.taxes_total!=null?" · Tributos "+moneyBR(p.fiscal.taxes_total):"")+"</div><div class='purchase-actions'><button class='btn soft'>Abrir nota e itens</button></div>";d.querySelector("button").onclick=function(ev){ev.stopPropagation();openSavedPurchase(p.id)};d.onclick=function(){openSavedPurchase(p.id)};h.appendChild(d)});renderAllBought()
 }
+function allBoughtEntries(){
+  var out=[];
+  allPurchaseRefs().forEach(function(ref){
+    var p=ref.purchase,items=Array.isArray(p.items)?p.items:[];
+    items.forEach(function(x,i){
+      out.push({
+        purchaseId:p.id,itemIndex:i,name:x.name||x.description||("Item "+(i+1)),
+        qty:Number(x.qty??x.quantity)||1,total:Number(x.total??x.total_value)||0,
+        market:p.market||p.fiscal?.establishment||p.fiscal?.trade_name||"Mercado não informado",
+        date:p.date||fiscalDateToInput(p.fiscal?.date_time)||"",
+        note:x.note||"",photos:Array.isArray(x.photos)?x.photos:[]
+      });
+    });
+  });
+  return out.sort(function(a,b){return String(b.date||"").localeCompare(String(a.date||""))});
+}
+function renderAllBought(){
+  var host=document.getElementById("allBoughtList"),count=document.getElementById("allBoughtCount"),search=document.getElementById("allBoughtSearch");
+  if(!host||!count)return;
+  var q=norm(search?.value||""),rows=allBoughtEntries();
+  if(q)rows=rows.filter(function(x){return norm([x.name,x.market,x.note].join(" ")).includes(q)});
+  count.textContent=rows.length+" item(ns) encontrado(s)";
+  host.innerHTML="";
+  if(!rows.length){host.innerHTML="<div class='card meta sec'>Nenhum item comprado encontrado.</div>";return}
+  rows.forEach(function(x){
+    var d=document.createElement("div");d.className="bought-row";
+    d.innerHTML="<div class='row'><div class='grow'><div class='bought-title'>"+esc(x.name)+"</div><div class='meta'>Qtd. "+String(x.qty).replace(".",",")+" · "+esc(x.market)+" · "+fmtDate(x.date)+(x.note?" · Obs. cadastrada":"")+(x.photos.length?" · 📷 "+x.photos.length:"")+"</div></div><div class='bought-price'>"+moneyBR(x.total)+"</div></div>";
+    d.onclick=function(){openPurchasedItem(x.purchaseId,x.itemIndex)};
+    host.appendChild(d);
+  });
+}
+function openPurchasedItem(purchaseId,itemIndex){
+  openSavedPurchase(purchaseId);
+  setTimeout(function(){openItemEditor(itemIndex)},0);
+}
+document.getElementById("allBoughtSearch")?.addEventListener("input",renderAllBought);
+
 function createList(name){var l={id:uid(),name:name||"Nova lista",status:"open",items:[],purchases:[],createdAt:new Date().toISOString()};state.lists.unshift(l);state.current=l.id;save();return l}
 document.getElementById("quickList").onclick=function(){document.getElementById("newList").focus();window.scrollTo({top:document.body.scrollHeight,behavior:"smooth"})};
 document.getElementById("addList").onclick=function(){var n=document.getElementById("newList").value.trim();if(!n)return toast("Digite o nome da lista.");createList(n);document.getElementById("newList").value="";page("list")};
@@ -799,8 +848,14 @@ function reconcilePreview(l,rec){
 function currentReconciliation(){
   var l=state.lists.find(function(x){return x.id===pendingReceipt?.listId});
   if(!l)return null;
+  var working=l;
+  if(pendingReceipt?._editPurchaseId){
+    working=deepCopy(l);
+    var original=findPurchaseRef(pendingReceipt._editPurchaseId);
+    if(original?.list?.id===l.id)rollbackPurchaseContribution(original.purchase,working);
+  }
   var rec=toReconRows(selectedReceiptRows());
-  var r=reconcilePreview(l,rec);pendingReceipt.recon=r;return r;
+  var r=reconcilePreview(working,rec);pendingReceipt.recon=r;return r;
 }
 function renderReceiptSummary(){
   var host=document.getElementById("receiptSummary");if(!host||!pendingReceipt)return;
