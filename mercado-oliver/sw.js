@@ -1,4 +1,4 @@
-const VERSION="0.2.0";
+const VERSION="0.2.1";
 const CACHE="mercado-oliver-"+VERSION;
 const SHELL=["./index.html","./manifest.webmanifest","./icon.svg","./version.json"];
 
