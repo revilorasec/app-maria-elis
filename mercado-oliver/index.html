@@ -22,8 +22,8 @@
 .qr-reader{width:100%;max-width:760px;margin:12px auto 0;border-radius:18px;overflow:hidden;background:#000;flex:1;min-height:0}
 .qr-video-wrap{position:relative;width:100%;overflow:hidden;border-radius:18px;background:#0f172a}
 .qr-video-wrap video{display:block;width:100%!important;height:min(68vh,620px)!important;object-fit:cover!important;background:#000;border-radius:18px}
-.qr-guide{position:absolute;top:18%;left:12%;right:12%;height:42%;border:3px solid #b8df74;border-radius:16px;box-shadow:0 0 0 999px #0005;pointer-events:none}
-.qr-scan-status{margin-top:10px;font-size:12px;color:#506158;min-height:18px}
+.qr-guide{position:absolute;left:50%;top:50%;width:min(78vw,360px);max-width:82%;aspect-ratio:1/1;transform:translate(-50%,-50%);border:3px solid #b8df74;border-radius:18px;box-shadow:0 0 0 999px #0005;pointer-events:none}
+.qr-scan-status{margin-top:10px;font-size:12px;color:#cbd5e1;min-height:18px}.qr-device-controls{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:10px}.qr-device-controls .btn{background:#172238;color:#fff;border-color:#31415d;min-width:110px}.qr-device-controls .btn.hidden{display:none!important}
 .qr-scan-actions{display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap;margin-top:12px}.photo{max-width:100%;max-height:240px;border-radius:14px;margin-top:10px;display:none}.photo.on{display:block}.receipt-photo-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin-top:8px}.receipt-photo-grid img{width:100%;aspect-ratio:1/1;object-fit:cover;border-radius:11px;border:1px solid var(--line)}.blockx{border:1px solid var(--line);border-radius:14px;padding:10px;margin-top:8px}.ok{color:var(--g)}.warn{color:var(--warn)}.badtext{color:var(--bad)}.blue{color:var(--blue)}.banner{border-radius:16px;padding:12px;background:#fff8e8;border:1px solid #f0ddad;color:#6d4b00;font-size:12px}.hidden{display:none!important}.split{display:grid;grid-template-columns:1fr 1fr;gap:8px}.bottom{position:fixed;left:0;right:0;bottom:0;background:#fff;border-top:1px solid var(--line);padding:7px 8px calc(7px + env(safe-area-inset-bottom));display:flex;justify-content:center;z-index:30}.nav{max-width:780px;width:100%;display:grid;grid-template-columns:repeat(4,1fr);gap:4px}.nav button{border:0;background:transparent;min-height:48px;border-radius:11px;color:var(--muted)}.nav button.on{background:var(--g2);color:var(--g);font-weight:700}.toast{position:fixed;left:50%;bottom:84px;transform:translateX(-50%);background:#10251a;color:#fff;padding:10px 12px;border-radius:11px;display:none;z-index:60;max-width:90%;font-size:12px}.toast.on{display:block}.modal{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:50;display:none;align-items:flex-end;justify-content:center;padding:10px}.modal.on{display:flex}.sheet{background:#fff;width:min(780px,100%);border-radius:22px 22px 14px 14px;padding:16px;max-height:88vh;overflow:auto}.sheet h2{font-size:19px}.separator{height:1px;background:var(--line);margin:12px 0}.mini-status{display:inline-block;padding:4px 7px;border-radius:999px;background:#f0f4f1;font-size:10px;color:var(--muted)}
 .fiscal-card{border:1px solid #dbe7e2;background:#f9fcfa;border-radius:16px;padding:12px;margin-top:10px}
 .fiscal-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:9px}
@@ -87,7 +87,7 @@
 <div class="app">
   <div class="top"><div class="logo">MO</div><div><b>Mercado Oliver</b><small>App de testes · atualizável no celular</small></div></div>
 <div class="app-tools">
-  <span id="versionLabel" class="app-version">v0.3.1</span>
+  <span id="versionLabel" class="app-version">v0.3.2</span>
   <button id="installAppBtn" class="btn soft">Instalar app</button>
   <button id="checkUpdateBtn" class="btn">Verificar atualização</button>
 </div>
@@ -158,6 +158,10 @@
     <p>Aponte a câmera para o QR Code. A leitura acontece automaticamente, sem tirar foto.</p>
     <div id="qrReader" class="qr-reader"></div>
     <div id="qrScanStatus" class="qr-scan-status"></div>
+    <div class="qr-device-controls">
+      <button id="qrTorch" class="btn hidden" type="button">Ligar luz</button>
+      <button id="qrZoom" class="btn hidden" type="button">Aproximar</button>
+    </div>
     <div class="qr-scan-actions"><button id="qrClose" class="btn">Cancelar</button></div>
   </div>
 </div>
@@ -252,10 +256,10 @@
 
 <script>
 (function(){
-var APP_VERSION="0.3.1";
+var APP_VERSION="0.3.2";
 var FISCAL_API="https://dumoqktblhultwxmckbd.supabase.co/functions/v1/mercado-fiscal-qr";
 var SUPABASE_ANON="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR1bW9xa3RibGh1bHR3eG1ja2JkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM4OTYzODQsImV4cCI6MjA5OTQ3MjM4NH0.7JXoeer17mPw9A4i6yJBTwTn0pBNL0FUkkBed9Y4qmg";
-var KEY="mercado_oliver_v3",qrZxingControls=null,qrZxingReader=null,qrScanDone=false,pendingReceipt=null,lastPage="home",creatingList=false;
+var KEY="mercado_oliver_v3",qrZxingControls=null,qrZxingReader=null,qrVideoTrack=null,qrScanDone=false,qrTorchOn=false,qrZoomOn=false,pendingReceipt=null,lastPage="home",creatingList=false;
 var reasons=["Não tinha","Qualidade ruim / feio","Preço alto","Troquei por outro","Desisti","Outro"];
 var state=load();
 function blank(){return {lists:[],current:null,standalonePurchases:[]}}
@@ -299,14 +303,14 @@ document.getElementById("closeList").onclick=function(){var l=cur();if(!l)return
 document.querySelectorAll(".nav button").forEach(function(b){b.onclick=function(){if(b.dataset.p==="list"&&!cur())return toast("Abra uma lista primeiro.");page(b.dataset.p)}});
 
 async function loadZxingScanner(){
-  if(window.ZXingBrowser?.BrowserMultiFormatReader)return window.ZXingBrowser;
+  if(window.ZXingBrowser?.BrowserQRCodeReader)return window.ZXingBrowser;
   if(window.__zxingQrLoading)return window.__zxingQrLoading;
   window.__zxingQrLoading=new Promise((res,rej)=>{
     const s=document.createElement('script');
     s.src='https://unpkg.com/@zxing/browser@0.1.4/umd/zxing-browser.min.js';
     s.async=true;
     const tm=setTimeout(()=>rej(Error('ZXING_QR_LOAD_TIMEOUT')),12000);
-    s.onload=()=>{clearTimeout(tm);window.ZXingBrowser?.BrowserMultiFormatReader?res(window.ZXingBrowser):rej(Error('ZXING_QR_NOT_LOADED'))};
+    s.onload=()=>{clearTimeout(tm);window.ZXingBrowser?.BrowserQRCodeReader?res(window.ZXingBrowser):rej(Error('ZXING_QR_NOT_LOADED'))};
     s.onerror=()=>{clearTimeout(tm);rej(Error('ZXING_QR_LOAD_FAILED'))};
     document.head.appendChild(s);
   }).finally(()=>{window.__zxingQrLoading=null});
@@ -413,20 +417,28 @@ function applyFiscalToOpenScreens(){
 async function stopQrScan(){
   qrScanDone=true;
   if(qrZxingControls){try{await Promise.resolve(qrZxingControls.stop())}catch{}qrZxingControls=null}
-  qrZxingReader=null;
+  qrZxingReader=null;qrVideoTrack=null;qrTorchOn=false;qrZoomOn=false;
+  var torch=document.getElementById('qrTorch'),zoom=document.getElementById('qrZoom');
+  if(torch){torch.classList.add('hidden');torch.textContent='Ligar luz'}
+  if(zoom){zoom.classList.add('hidden');zoom.textContent='Aproximar'}
   var host=document.getElementById('qrReader');if(host)host.innerHTML='';
   document.getElementById('qrScanModal')?.classList.remove('on');
 }
+function extractNfceKey(raw){
+  var s=String(raw||'').trim(),m=s.match(/(?:^|\D)(\d{44})(?:\D|$)/);
+  if(m)return m[1];
+  try{
+    var u=new URL(s),p=u.searchParams.get('p')||u.searchParams.get('chNFe')||u.searchParams.get('chave')||'';
+    var x=p.match(/\d{44}/);return x?x[0]:null;
+  }catch(e){return null}
+}
 function qrLooksValid(raw){
-  var s=String(raw||'').trim();
-  if(!s)return false;
-  if(/\d{44}/.test(s))return true;
-  try{var u=new URL(s);return /^https?:$/.test(u.protocol)}catch(e){return s.length>20}
+  var key=extractNfceKey(raw);
+  if(!key||key.length!==44)return false;
+  return key.slice(20,22)==='65';
 }
 function localFiscalFromQr(raw){
-  var s=String(raw||''),key=null,m=s.match(/(?:^|\D)(\d{44})(?:\D|$)/);
-  if(m)key=m[1];
-  if(!key){try{var u=new URL(s),p=u.searchParams.get('p')||u.searchParams.get('chNFe')||u.searchParams.get('chave')||'',x=p.match(/\d{44}/);if(x)key=x[0]}catch(e){}}
+  var s=String(raw||''),key=extractNfceKey(s);
   if(!key)return {official_query_url:s,qr_used:true};
   return {
     access_key:key,uf_code:key.slice(0,2),year_month:'20'+key.slice(2,4)+'-'+key.slice(4,6),
@@ -469,6 +481,47 @@ async function finishQrScan(raw){
   toast('QR reconhecido. Buscando dados da nota…');
   setTimeout(function(){resolveFiscalInBackground(text)},0);
 }
+async function configureQrCamera(track){
+  qrVideoTrack=track||null;
+  if(!track)return;
+  var caps={};try{caps=track.getCapabilities?.()||{}}catch(e){}
+  var advanced=[];
+  try{
+    if(Array.isArray(caps.focusMode)&&caps.focusMode.includes('continuous'))advanced.push({focusMode:'continuous'});
+    if(Array.isArray(caps.exposureMode)&&caps.exposureMode.includes('continuous'))advanced.push({exposureMode:'continuous'});
+    if(Array.isArray(caps.whiteBalanceMode)&&caps.whiteBalanceMode.includes('continuous'))advanced.push({whiteBalanceMode:'continuous'});
+    if(advanced.length)await track.applyConstraints({advanced:advanced});
+  }catch(e){console.warn('Ajuste câmera',e)}
+
+  var torch=document.getElementById('qrTorch'),zoom=document.getElementById('qrZoom');
+  if(torch){
+    if(caps.torch){torch.classList.remove('hidden');torch.textContent='Ligar luz'}else torch.classList.add('hidden');
+  }
+  if(zoom){
+    var z=caps.zoom;
+    if(z&&Number.isFinite(Number(z.max))&&Number(z.max)>Number(z.min||1)){zoom.classList.remove('hidden');zoom.textContent='Aproximar'}else zoom.classList.add('hidden');
+  }
+}
+async function toggleQrTorch(){
+  if(!qrVideoTrack)return;
+  try{
+    var caps=qrVideoTrack.getCapabilities?.()||{};
+    if(!caps.torch)return;
+    qrTorchOn=!qrTorchOn;
+    await qrVideoTrack.applyConstraints({advanced:[{torch:qrTorchOn}]});
+    document.getElementById('qrTorch').textContent=qrTorchOn?'Desligar luz':'Ligar luz';
+  }catch(e){toast('Este aparelho não permitiu controlar a luz.')}
+}
+async function toggleQrZoom(){
+  if(!qrVideoTrack)return;
+  try{
+    var caps=qrVideoTrack.getCapabilities?.()||{},z=caps.zoom;if(!z)return;
+    qrZoomOn=!qrZoomOn;
+    var min=Number(z.min||1),max=Number(z.max||1),target=qrZoomOn?Math.min(max,Math.max(min,1.7)):Math.max(min,1);
+    await qrVideoTrack.applyConstraints({advanced:[{zoom:target}]});
+    document.getElementById('qrZoom').textContent=qrZoomOn?'Zoom normal':'Aproximar';
+  }catch(e){toast('Este aparelho não permitiu controlar o zoom.')}
+}
 async function startQrScan(){
   const status=document.getElementById('qrScanStatus');
   const msg=document.getElementById('camMsg');
@@ -476,7 +529,7 @@ async function startQrScan(){
     await stopQrScan();
     qrScanDone=false;
     document.getElementById('qrScanModal').classList.add('on');
-    status.textContent='Aponte para o QR Code da NFC-e.';
+    status.textContent='Aponte para o QR Code da NFC-e. Mantenha o código inteiro dentro do quadrado.';
     msg.textContent='';
 
     const ZX=await loadZxingScanner();
@@ -484,17 +537,24 @@ async function startQrScan(){
     host.innerHTML='<div class="qr-video-wrap"><video id="qrZxingVideo" playsinline muted autoplay></video><i class="qr-guide"></i></div>';
     const video=document.getElementById('qrZxingVideo');
 
-    qrZxingReader=new ZX.BrowserMultiFormatReader();
+    qrZxingReader=new ZX.BrowserQRCodeReader();
     let controlsRef=null;
     const controls=await qrZxingReader.decodeFromConstraints(
-      {audio:false,video:{facingMode:{ideal:'environment'},width:{ideal:1920},height:{ideal:1080}}},
+      {audio:false,video:{
+        facingMode:{ideal:'environment'},
+        width:{ideal:1920,min:1280},
+        height:{ideal:1080,min:720}
+      }},
       video,
       function(result,error,ctrl){
         if(!result||qrScanDone)return;
         controlsRef=ctrl||controlsRef;
         qrZxingControls=controlsRef||qrZxingControls;
         const text=typeof result.getText==='function'?result.getText():(result.text||String(result));
-        if(qrLooksValid(text))finishQrScan(text).catch(console.error);
+        if(qrLooksValid(text)){
+          status.textContent='NFC-e reconhecida.';
+          finishQrScan(text).catch(console.error);
+        }
       }
     );
     controlsRef=controls;
@@ -502,21 +562,18 @@ async function startQrScan(){
     qrZxingControls=controls;
 
     const track=video.srcObject?.getVideoTracks?.()[0];
+    await configureQrCamera(track);
     const settings=track?.getSettings?.()||{};
-    try{
-      const caps=track?.getCapabilities?.()||{};
-      if(Array.isArray(caps.focusMode)&&caps.focusMode.includes('continuous')){
-        await track.applyConstraints({advanced:[{focusMode:'continuous'}]});
-      }
-    }catch{}
-    status.textContent='Scanner ativo'+(settings.width&&settings.height?' · '+settings.width+'×'+settings.height:'')+' · aponte para o QR Code.';
+    status.textContent='Scanner ativo'+(settings.width&&settings.height?' · '+settings.width+'×'+settings.height:'')+' · mantenha o QR inteiro no quadrado.';
   }catch(e){
-    console.error('Scanner ZXing',e);
+    console.error('Scanner QR',e);
     await stopQrScan();
     msg.textContent='Não foi possível abrir o leitor: '+(e?.message||e);
   }
 }
 document.getElementById("scan").onclick=startQrScan;
+document.getElementById("qrTorch").onclick=function(){toggleQrTorch().catch(console.error)};
+document.getElementById("qrZoom").onclick=function(){toggleQrZoom().catch(console.error)};
 document.getElementById("qrClose").onclick=()=>stopQrScan();
 document.getElementById("continueReceipt").onclick=function(){var q=document.getElementById("qrText").value.trim();if(q)finishQrScan(q)};
 
