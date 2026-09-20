@@ -1,5 +1,5 @@
 {
-  "version": "0.2.0",
-  "build": "2026.09.20.1",
-  "notes": "PWA instalável com atualização pelo próprio app"
+  "version": "0.2.1",
+  "build": "2026.09.20.2",
+  "notes": "Botão Instalar sempre visível e diagnóstico explícito da NFC-e"
 }
