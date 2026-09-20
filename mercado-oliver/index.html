@@ -213,6 +213,94 @@ async function loadZxingScanner(){
   }).finally(()=>{window.__zxingQrLoading=null});
   return window.__zxingQrLoading;
 }
+async function resolveFiscalQr(raw){
+  const ctl=new AbortController();
+  const tm=setTimeout(function(){ctl.abort()},12000);
+  try{
+    const r=await fetch(FISCAL_API,{
+      method:"POST",
+      signal:ctl.signal,
+      cache:"no-store",
+      headers:{
+        "content-type":"application/json",
+        "apikey":SUPABASE_ANON,
+        "authorization":"Bearer "+SUPABASE_ANON
+      },
+      body:JSON.stringify({qr:raw})
+    });
+    const b=await r.json().catch(function(){return{}});
+    if(!r.ok)throw Error(b.error||("Erro fiscal "+r.status));
+    return b;
+  }finally{clearTimeout(tm)}
+}
+function fiscalDateToInput(v){
+  var s=String(v||"").trim(),m=s.match(/(\d{2})\/(\d{2})\/(\d{4})/);
+  if(m)return m[3]+"-"+m[2]+"-"+m[1];
+  m=s.match(/(\d{4})-(\d{2})-(\d{2})/);
+  if(m)return m[1]+"-"+m[2]+"-"+m[3];
+  return "";
+}
+function fiscalItemsText(f){
+  var rows=Array.isArray(f?.item_details)?f.item_details:[];
+  if(rows.length)return rows.map(function(x){
+    var q=Number(x.quantity)||1;
+    var total=Number(x.net_value!=null?x.net_value:x.total_value);
+    return String(x.description||"").trim()+" | "+String(q).replace(".",",")+" | "+(Number.isFinite(total)?total.toFixed(2).replace(".",","):"");
+  }).filter(Boolean).join("\n");
+  return Array.isArray(f?.items)?f.items.map(function(x){return String(x||"").trim()+" | 1 | "}).filter(Boolean).join("\n"):"";
+}
+async function resolveFiscalInBackground(text){
+  var st=document.getElementById('detailLookupStatus');
+  if(st){st.textContent='QR reconhecido. Buscando supermercado, data, itens, valores e tributos…';st.className='banner'}
+  try{
+    var resolved=await resolveFiscalQr(text);
+    if(!pendingReceipt||pendingReceipt.qr!==text)return;
+    var remote=resolved?.fiscal||{};
+    pendingReceipt.fiscal={...(pendingReceipt.fiscal||{}),...Object.fromEntries(Object.entries(remote).filter(function(e){return e[1]!==null&&e[1]!==undefined&&e[1]!==""}))};
+    pendingReceipt.fiscalLoading=false;
+    applyFiscalToOpenScreens();
+    var ff=pendingReceipt.fiscal||{};
+    var market=ff.establishment||ff.trade_name||ff.legal_name||'';
+    var parts=[market,ff.date_time,ff.value!=null?moneyBR(ff.value):''].filter(Boolean);
+    if(st){st.textContent=parts.length?'Nota identificada: '+parts.join(' · '):'Nota reconhecida. Confira os dados encontrados.';st.className='banner'}
+    document.getElementById('camMsg').textContent='Nota fiscal reconhecida.';
+    if(resolved?.warning)console.warn('Consulta NFC-e:',resolved.warning);
+  }catch(err){
+    console.error('Consulta fiscal',err);
+    if(!pendingReceipt||pendingReceipt.qr!==text)return;
+    pendingReceipt.fiscalLoading=false;
+    applyFiscalToOpenScreens();
+    if(st){st.textContent='QR reconhecido. Mantive os dados da chave fiscal; a consulta complementar não respondeu.';st.className='banner'}
+    document.getElementById('camMsg').textContent='QR reconhecido; consulta fiscal complementar indisponível.';
+  }
+}
+function applyFiscalToOpenScreens(){
+  if(!pendingReceipt)return;
+  var f=pendingReceipt.fiscal||{};
+  var market=String(f.establishment||f.trade_name||f.legal_name||'').trim();
+  var d=fiscalDateToInput(f.date_time)||'';
+  var marketEl=document.getElementById('detailMarket');
+  var dateEl=document.getElementById('detailDate');
+  var nameEl=document.getElementById('detailName');
+  var itemsEl=document.getElementById('receiptItems');
+
+  if(market&&marketEl&&(!marketEl.value||marketEl.dataset.auto==='1')){
+    marketEl.value=market;marketEl.dataset.auto='1';pendingReceipt.market=market;
+  }
+  if(d&&dateEl&&(!dateEl.value||dateEl.dataset.auto==='1')){
+    dateEl.value=d;dateEl.dataset.auto='1';pendingReceipt.date=d;
+  }
+  if(nameEl&&(market||d)&&(!nameEl.value||nameEl.dataset.auto==='1')){
+    var generated=(market||pendingReceipt.market||'Compra')+' - '+fmtDate(d||pendingReceipt.date||today());
+    nameEl.value=generated;nameEl.dataset.auto='1';pendingReceipt.name=generated;
+    var title=document.getElementById('detailTitle');if(title)title.textContent=generated;
+  }
+  var txt=fiscalItemsText(f);
+  if(txt&&itemsEl&&(!itemsEl.value||itemsEl.dataset.auto==='1')){
+    itemsEl.value=txt;itemsEl.dataset.auto='1';
+  }
+  renderFiscalDetails();
+}
 async function stopQrScan(){
   qrScanDone=true;
   if(qrZxingControls){try{await Promise.resolve(qrZxingControls.stop())}catch{}qrZxingControls=null}
@@ -418,19 +506,20 @@ function populateDetailListSelector(){
 }
 function openDetail(){
   var f=pendingReceipt?.fiscal||{};
+  var modal=document.getElementById("detailModal");
+  modal.classList.add("on");
   document.getElementById("detailTitle").textContent=pendingReceipt.name||"Detalhes da compra";
   var marketEl=document.getElementById("detailMarket"),dateEl=document.getElementById("detailDate"),nameEl=document.getElementById("detailName"),itemsEl=document.getElementById("receiptItems");
-  marketEl.value=pendingReceipt.market||""; marketEl.dataset.auto="1";
-  dateEl.value=pendingReceipt.date||today(); dateEl.dataset.auto="1";
-  nameEl.value=pendingReceipt.name||("Compra - "+fmtDate(pendingReceipt.date||today())); nameEl.dataset.auto="1";
-  itemsEl.value=fiscalItemsText(f); itemsEl.dataset.auto="1";
+  marketEl.value=pendingReceipt.market||"";marketEl.dataset.auto="1";
+  dateEl.value=pendingReceipt.date||today();dateEl.dataset.auto="1";
+  nameEl.value=pendingReceipt.name||("Compra - "+fmtDate(pendingReceipt.date||today()));nameEl.dataset.auto="1";
+  itemsEl.value=fiscalItemsText(f);itemsEl.dataset.auto="1";
   document.getElementById("recon").innerHTML="";
   document.getElementById("photoOcrStatus").textContent="";
   document.getElementById("detailLookupStatus").textContent=pendingReceipt.fiscalLoading?"QR reconhecido. Buscando dados da nota…":"Confira os dados da compra.";
   populateDetailListSelector();
   renderFiscalDetails();
   renderPhotos();
-  document.getElementById("detailModal").classList.add("on");
 }
 document.getElementById("cancelDetail").onclick=function(){document.getElementById("detailModal").classList.remove("on")};
 document.getElementById("detailListLink").onchange=function(){if(pendingReceipt)pendingReceipt.listId=this.value||null};
