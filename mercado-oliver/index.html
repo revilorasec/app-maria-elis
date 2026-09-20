@@ -87,7 +87,7 @@
 <div class="app">
   <div class="top"><div class="logo">MO</div><div><b>Mercado Oliver</b><small>App de testes · atualizável no celular</small></div></div>
 <div class="app-tools">
-  <span id="versionLabel" class="app-version">v0.3.0</span>
+  <span id="versionLabel" class="app-version">v0.3.1</span>
   <button id="installAppBtn" class="btn soft">Instalar app</button>
   <button id="checkUpdateBtn" class="btn">Verificar atualização</button>
 </div>
@@ -252,7 +252,7 @@
 
 <script>
 (function(){
-var APP_VERSION="0.3.0";
+var APP_VERSION="0.3.1";
 var FISCAL_API="https://dumoqktblhultwxmckbd.supabase.co/functions/v1/mercado-fiscal-qr";
 var SUPABASE_ANON="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR1bW9xa3RibGh1bHR3eG1ja2JkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM4OTYzODQsImV4cCI6MjA5OTQ3MjM4NH0.7JXoeer17mPw9A4i6yJBTwTn0pBNL0FUkkBed9Y4qmg";
 var KEY="mercado_oliver_v3",qrZxingControls=null,qrZxingReader=null,qrScanDone=false,pendingReceipt=null,lastPage="home",creatingList=false;
@@ -787,6 +787,17 @@ document.getElementById("savePurchase").onclick=function(){
 
 var deferredInstallPrompt=null,swRegistration=null,remoteAppVersion=null;
 function standaloneMode(){return window.matchMedia?.("(display-mode: standalone)")?.matches||window.navigator.standalone===true}
+function compareVersions(a,b){
+  var pa=String(a||"").split(".").map(function(x){return parseInt(x,10)||0});
+  var pb=String(b||"").split(".").map(function(x){return parseInt(x,10)||0});
+  var n=Math.max(pa.length,pb.length);
+  for(var i=0;i<n;i++){
+    var av=pa[i]||0,bv=pb[i]||0;
+    if(av>bv)return 1;
+    if(av<bv)return -1;
+  }
+  return 0;
+}
 function showUpdate(version,notes){
   remoteAppVersion=version||remoteAppVersion;
   var bar=document.getElementById("appUpdate"),txt=document.getElementById("updateText");
@@ -841,11 +852,15 @@ async function checkAppUpdate(manual){
     var r=await fetch("./version.json?t="+Date.now(),{cache:"no-store"});
     var v=await r.json();
     remoteAppVersion=String(v.version||"");
-    if(remoteAppVersion&&remoteAppVersion!==APP_VERSION){
+    var cmp=remoteAppVersion?compareVersions(remoteAppVersion,APP_VERSION):0;
+    if(cmp>0){
       showUpdate(remoteAppVersion,String(v.notes||""));
       try{await swRegistration?.update()}catch(e){}
-    }else if(manual){
-      toast("Você já está na versão mais recente: v"+APP_VERSION+".");
+    }else{
+      document.getElementById("appUpdate")?.classList.remove("on");
+      if(manual){
+        toast("Você já está na versão mais recente: v"+APP_VERSION+".");
+      }
     }
   }catch(e){
     console.warn("Verificação de versão",e);
@@ -864,7 +879,7 @@ document.getElementById("updateNowBtn")?.addEventListener("click",async function
     }
     try{await swRegistration?.update()}catch(e){}
     setTimeout(function(){
-      var v=remoteAppVersion||Date.now();
+      var v=(remoteAppVersion&&compareVersions(remoteAppVersion,APP_VERSION)>0)?remoteAppVersion:APP_VERSION;
       location.replace("./index.html?v="+encodeURIComponent(v)+"&t="+Date.now());
     },500);
   }catch(e){
