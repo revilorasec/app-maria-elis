@@ -7,7 +7,18 @@
 <title>Mercado Oliver</title>
 <style>
 :root{--g:#16734a;--gd:#0f4f34;--g2:#e8f5ee;--bg:#f5f7f6;--card:#fff;--ink:#142019;--muted:#718078;--line:#dfe7e2;--warn:#9a6500;--bad:#b43a3a;--blue:#315c9d}
-*{box-sizing:border-box}body{margin:0;background:var(--bg);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;color:var(--ink)}button,input,select,textarea{font:inherit}.app{max-width:780px;margin:auto;padding:14px 14px 96px}.top{display:flex;align-items:center;gap:10px;margin-bottom:14px}.logo{width:46px;height:46px;border-radius:14px;background:var(--g);color:#fff;display:grid;place-items:center;font-weight:900;font-size:18px}.top b{font-size:20px}.top small{display:block;color:var(--muted);font-size:12px}.page{display:none}.page.on{display:block}.hero{background:linear-gradient(135deg,var(--gd),#238959);color:#fff;border-radius:24px;padding:19px}.hero h1{margin:4px 0;font-size:25px}.hero p{margin:0;color:#dff0e6;font-size:13px;line-height:1.45}.hero-actions{display:grid;grid-template-columns:1.4fr 1fr;gap:9px;margin-top:15px}.hero .btn{border:0}.sec{margin-top:16px}.card{background:#fff;border:1px solid var(--line);border-radius:19px;padding:14px}.row{display:flex;gap:9px;align-items:center;flex-wrap:wrap}.grow{flex:1;min-width:0}.field{width:100%;min-height:46px;border:1px solid var(--line);border-radius:12px;padding:11px 12px;background:#fff;color:var(--ink);font-size:16px}.btn{min-height:44px;border:1px solid var(--line);border-radius:12px;padding:10px 13px;background:#fff;font-weight:750;color:var(--ink)}.btn.primary{background:var(--g);border-color:var(--g);color:#fff}.btn.soft{background:var(--g2);border-color:#cce6d6;color:var(--g)}.btn.dark{background:#10251a;border-color:#10251a;color:#fff}.btn.block{width:100%}.kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:12px}.kpi{background:#fff;border:1px solid var(--line);border-radius:15px;padding:11px}.kpi b{display:block;font-size:19px}.kpi span{font-size:11px;color:var(--muted)}h2{font-size:17px;margin:0 0 10px}h3{margin:0;font-size:14px}.meta{font-size:12px;color:var(--muted);line-height:1.45}.list-card,.item,.purchase{background:#fff;border:1px solid var(--line);border-radius:16px;padding:12px;margin:8px 0}.progress{height:7px;background:#edf1ee;border-radius:999px;overflow:hidden;margin-top:9px}.progress i{display:block;height:100%;background:var(--g);width:0}.chips{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}.chip{border:1px solid var(--line);background:#fff;border-radius:999px;padding:7px 9px;font-size:11px;font-weight:700}.chip.sel{background:var(--g2);color:var(--g);border-color:#cde4d6}.chip.bad{background:#fff1f1;color:var(--bad)}.qrbox{background:#10251a;color:#fff;border-radius:19px;padding:14px}.qrbox small{color:#c7ddcf}.qrbox video{width:100%;border-radius:14px;background:#000;margin-top:10px;display:none;max-height:430px}.qrbox video.on{display:block}.camline{margin-top:8px;font-size:12px;color:#c7ddcf}.photo{max-width:100%;max-height:240px;border-radius:14px;margin-top:10px;display:none}.photo.on{display:block}.receipt-photo-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin-top:8px}.receipt-photo-grid img{width:100%;aspect-ratio:1/1;object-fit:cover;border-radius:11px;border:1px solid var(--line)}.blockx{border:1px solid var(--line);border-radius:14px;padding:10px;margin-top:8px}.ok{color:var(--g)}.warn{color:var(--warn)}.badtext{color:var(--bad)}.blue{color:var(--blue)}.banner{border-radius:16px;padding:12px;background:#fff8e8;border:1px solid #f0ddad;color:#6d4b00;font-size:12px}.hidden{display:none!important}.split{display:grid;grid-template-columns:1fr 1fr;gap:8px}.bottom{position:fixed;left:0;right:0;bottom:0;background:#fff;border-top:1px solid var(--line);padding:7px 8px calc(7px + env(safe-area-inset-bottom));display:flex;justify-content:center;z-index:30}.nav{max-width:780px;width:100%;display:grid;grid-template-columns:repeat(4,1fr);gap:4px}.nav button{border:0;background:transparent;min-height:48px;border-radius:11px;color:var(--muted)}.nav button.on{background:var(--g2);color:var(--g);font-weight:700}.toast{position:fixed;left:50%;bottom:84px;transform:translateX(-50%);background:#10251a;color:#fff;padding:10px 12px;border-radius:11px;display:none;z-index:60;max-width:90%;font-size:12px}.toast.on{display:block}.modal{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:50;display:none;align-items:flex-end;justify-content:center;padding:10px}.modal.on{display:flex}.sheet{background:#fff;width:min(780px,100%);border-radius:22px 22px 14px 14px;padding:16px;max-height:88vh;overflow:auto}.sheet h2{font-size:19px}.separator{height:1px;background:var(--line);margin:12px 0}.mini-status{display:inline-block;padding:4px 7px;border-radius:999px;background:#f0f4f1;font-size:10px;color:var(--muted)}@media(max-width:560px){.hero-actions,.split{grid-template-columns:1fr}.kpis{grid-template-columns:repeat(3,1fr)}.row.mobile-stack>*{width:100%}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;color:var(--ink)}button,input,select,textarea{font:inherit}.app{max-width:780px;margin:auto;padding:14px 14px 96px}.top{display:flex;align-items:center;gap:10px;margin-bottom:14px}.logo{width:46px;height:46px;border-radius:14px;background:var(--g);color:#fff;display:grid;place-items:center;font-weight:900;font-size:18px}.top b{font-size:20px}.top small{display:block;color:var(--muted);font-size:12px}.page{display:none}.page.on{display:block}.hero{background:linear-gradient(135deg,var(--gd),#238959);color:#fff;border-radius:24px;padding:19px}.hero h1{margin:4px 0;font-size:25px}.hero p{margin:0;color:#dff0e6;font-size:13px;line-height:1.45}.hero-actions{display:grid;grid-template-columns:1.4fr 1fr;gap:9px;margin-top:15px}.hero .btn{border:0}.sec{margin-top:16px}.card{background:#fff;border:1px solid var(--line);border-radius:19px;padding:14px}.row{display:flex;gap:9px;align-items:center;flex-wrap:wrap}.grow{flex:1;min-width:0}.field{width:100%;min-height:46px;border:1px solid var(--line);border-radius:12px;padding:11px 12px;background:#fff;color:var(--ink);font-size:16px}.btn{min-height:44px;border:1px solid var(--line);border-radius:12px;padding:10px 13px;background:#fff;font-weight:750;color:var(--ink)}.btn.primary{background:var(--g);border-color:var(--g);color:#fff}.btn.soft{background:var(--g2);border-color:#cce6d6;color:var(--g)}.btn.dark{background:#10251a;border-color:#10251a;color:#fff}.btn.block{width:100%}.kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:12px}.kpi{background:#fff;border:1px solid var(--line);border-radius:15px;padding:11px}.kpi b{display:block;font-size:19px}.kpi span{font-size:11px;color:var(--muted)}h2{font-size:17px;margin:0 0 10px}h3{margin:0;font-size:14px}.meta{font-size:12px;color:var(--muted);line-height:1.45}.list-card,.item,.purchase{background:#fff;border:1px solid var(--line);border-radius:16px;padding:12px;margin:8px 0}.progress{height:7px;background:#edf1ee;border-radius:999px;overflow:hidden;margin-top:9px}.progress i{display:block;height:100%;background:var(--g);width:0}.chips{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}.chip{border:1px solid var(--line);background:#fff;border-radius:999px;padding:7px 9px;font-size:11px;font-weight:700}.chip.sel{background:var(--g2);color:var(--g);border-color:#cde4d6}.chip.bad{background:#fff1f1;color:var(--bad)}.qrbox{background:#10251a;color:#fff;border-radius:19px;padding:14px}.qrbox small{color:#c7ddcf}.camline{margin-top:8px;font-size:12px;color:#c7ddcf}
+.qr-scan-modal{position:fixed;inset:0;background:rgba(8,20,45,.62);display:none;place-items:center;padding:16px;z-index:80}
+.qr-scan-modal.on{display:grid}
+.qr-scan-sheet{background:#fff;width:min(560px,100%);max-height:94vh;overflow:auto;border-radius:18px;padding:16px}
+.qr-scan-sheet h3{margin:0 0 6px;font-size:19px}
+.qr-scan-sheet p{margin:0;color:var(--muted);font-size:12px;line-height:1.45}
+.qr-reader{width:min(520px,88vw);margin:12px auto 0;border-radius:18px;overflow:hidden;background:#0c1527}
+.qr-video-wrap{position:relative;width:100%;overflow:hidden;border-radius:18px;background:#0f172a}
+.qr-video-wrap video{display:block;width:100%!important;height:auto!important;aspect-ratio:4/3;object-fit:cover!important;background:#0f172a;border-radius:18px}
+.qr-guide{position:absolute;top:18%;left:12%;right:12%;height:42%;border:3px solid #b8df74;border-radius:16px;box-shadow:0 0 0 999px #0005;pointer-events:none}
+.qr-scan-status{margin-top:10px;font-size:12px;color:#506158;min-height:18px}
+.qr-scan-actions{display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap;margin-top:12px}.photo{max-width:100%;max-height:240px;border-radius:14px;margin-top:10px;display:none}.photo.on{display:block}.receipt-photo-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin-top:8px}.receipt-photo-grid img{width:100%;aspect-ratio:1/1;object-fit:cover;border-radius:11px;border:1px solid var(--line)}.blockx{border:1px solid var(--line);border-radius:14px;padding:10px;margin-top:8px}.ok{color:var(--g)}.warn{color:var(--warn)}.badtext{color:var(--bad)}.blue{color:var(--blue)}.banner{border-radius:16px;padding:12px;background:#fff8e8;border:1px solid #f0ddad;color:#6d4b00;font-size:12px}.hidden{display:none!important}.split{display:grid;grid-template-columns:1fr 1fr;gap:8px}.bottom{position:fixed;left:0;right:0;bottom:0;background:#fff;border-top:1px solid var(--line);padding:7px 8px calc(7px + env(safe-area-inset-bottom));display:flex;justify-content:center;z-index:30}.nav{max-width:780px;width:100%;display:grid;grid-template-columns:repeat(4,1fr);gap:4px}.nav button{border:0;background:transparent;min-height:48px;border-radius:11px;color:var(--muted)}.nav button.on{background:var(--g2);color:var(--g);font-weight:700}.toast{position:fixed;left:50%;bottom:84px;transform:translateX(-50%);background:#10251a;color:#fff;padding:10px 12px;border-radius:11px;display:none;z-index:60;max-width:90%;font-size:12px}.toast.on{display:block}.modal{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:50;display:none;align-items:flex-end;justify-content:center;padding:10px}.modal.on{display:flex}.sheet{background:#fff;width:min(780px,100%);border-radius:22px 22px 14px 14px;padding:16px;max-height:88vh;overflow:auto}.sheet h2{font-size:19px}.separator{height:1px;background:var(--line);margin:12px 0}.mini-status{display:inline-block;padding:4px 7px;border-radius:999px;background:#f0f4f1;font-size:10px;color:var(--muted)}@media(max-width:560px){.hero-actions,.split{grid-template-columns:1fr}.kpis{grid-template-columns:repeat(3,1fr)}.row.mobile-stack>*{width:100%}}
 </style>
 </head>
 <body>
@@ -53,14 +64,11 @@
     <div class="card">
       <div class="row"><div class="grow"><h2>Escanear NFC-e</h2><div class="meta">Pode começar por aqui, sem criar uma lista antes.</div></div><button id="receiptBack" class="btn">Voltar</button></div>
     </div>
-    <div class="sec qrbox">
-      <b>Leitor QR Code</b><br><small>Mesmo padrão do Racha Viagem: ZXing + câmera traseira.</small>
-      <div class="row" style="margin-top:10px">
-        <button id="scan" class="btn soft">Abrir câmera</button>
-        <label class="btn" style="background:#fff;color:#153b28">Fotografar QR<input id="qrPhoto" type="file" accept="image/*" capture="environment" hidden></label>
-      </div>
-      <div id="camMsg" class="camline"></div>
-      <video id="video" playsinline muted></video>
+    <div class="sec card">
+      <h2>QR Code da NFC-e</h2>
+      <div class="meta">A leitura acontece automaticamente. Abra o leitor e mantenha o QR dentro da moldura.</div>
+      <button id="scan" class="btn primary block" style="margin-top:10px">▣ Abrir leitor QR</button>
+      <div id="camMsg" class="meta" style="margin-top:8px"></div>
     </div>
     <div class="sec card">
       <h2>QR lido</h2>
@@ -72,6 +80,16 @@
   <section id="history" class="page">
     <h2>Histórico</h2><div id="historyList"></div>
   </section>
+</div>
+
+<div id="qrScanModal" class="qr-scan-modal">
+  <div class="qr-scan-sheet">
+    <h3>Ler QR Code da nota fiscal</h3>
+    <p>Aponte a câmera para o QR Code. A leitura acontece automaticamente, sem tirar foto.</p>
+    <div id="qrReader" class="qr-reader"></div>
+    <div id="qrScanStatus" class="qr-scan-status"></div>
+    <div class="qr-scan-actions"><button id="qrClose" class="btn">Cancelar</button></div>
+  </div>
 </div>
 
 <div id="linkModal" class="modal"><div class="sheet">
@@ -111,10 +129,10 @@
 
 <div class="bottom"><div class="nav"><button data-p="home" class="on">Início</button><button data-p="list">Lista</button><button data-p="receipt">Nota</button><button data-p="history">Histórico</button></div></div>
 <div id="toast" class="toast"></div>
-<script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js"></script>
+
 <script>
 (function(){
-var KEY="mercado_oliver_v3",reader=null,pendingReceipt=null,lastPage="home",creatingList=false;
+var KEY="mercado_oliver_v3",qrZxingControls=null,qrZxingReader=null,qrScanDone=false,pendingReceipt=null,lastPage="home",creatingList=false;
 var reasons=["Não tinha","Qualidade ruim / feio","Preço alto","Troquei por outro","Desisti","Outro"];
 var state=load();
 function blank(){return {lists:[],current:null,standalonePurchases:[]}}
@@ -124,7 +142,7 @@ function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2
 function esc(s){return String(s||"").replace(/[&<>"']/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c]})}
 function cur(){return state.lists.find(function(x){return x.id===state.current})||null}
 function toast(t){var e=document.getElementById("toast");e.textContent=t;e.classList.add("on");clearTimeout(e.t);e.t=setTimeout(function(){e.classList.remove("on")},2500)}
-function page(p){lastPage=document.querySelector(".page.on")?.id||"home";document.querySelectorAll(".page").forEach(function(e){e.classList.toggle("on",e.id===p)});document.querySelectorAll(".nav button").forEach(function(b){b.classList.toggle("on",b.dataset.p===p)});if(p!=="receipt")stopCam();window.scrollTo(0,0)}
+function page(p){lastPage=document.querySelector(".page.on")?.id||"home";document.querySelectorAll(".page").forEach(function(e){e.classList.toggle("on",e.id===p)});document.querySelectorAll(".nav button").forEach(function(b){b.classList.toggle("on",b.dataset.p===p)});if(p!=="receipt")stopQrScan();window.scrollTo(0,0)}
 function fmtDate(s){if(!s)return"";var p=s.split("-");return p.length===3?p[2]+"/"+p[1]+"/"+p[0]:s}
 function today(){var d=new Date(),m=String(d.getMonth()+1).padStart(2,"0"),day=String(d.getDate()).padStart(2,"0");return d.getFullYear()+"-"+m+"-"+day}
 function deriveStatus(it){var q=Number(it.qty)||1,b=Number(it.boughtQty)||0;if(b>=q)return"Comprado";if(b>0)return"Parcial "+b+"/"+q;if(it.skipReason)return it.skipReason;return"Pendente"}
@@ -152,29 +170,101 @@ document.getElementById("quickList").onclick=function(){document.getElementById(
 document.getElementById("addList").onclick=function(){var n=document.getElementById("newList").value.trim();if(!n)return toast("Digite o nome da lista.");createList(n);document.getElementById("newList").value="";page("list")};
 document.getElementById("addItem").onclick=function(){var l=cur(),n=document.getElementById("itemName").value.trim();if(!l||!n)return toast("Digite o produto.");var q=Math.max(.01,Number(document.getElementById("itemQty").value.replace(",","."))||1);l.items.push({id:uid(),name:n,qty:q,boughtQty:0,skipReason:""});document.getElementById("itemName").value="";save()};
 document.getElementById("backHome").onclick=function(){page("home")};document.getElementById("receiptBack").onclick=function(){page(lastPage==="receipt"?"home":lastPage)};
-document.getElementById("quickScan").onclick=function(){pendingReceipt={qr:"",startedFromList:null};page("receipt");setTimeout(startCam,250)};
-document.getElementById("scanForList").onclick=function(){var l=cur();pendingReceipt={qr:"",startedFromList:l?l.id:null};page("receipt");setTimeout(startCam,250)};
+document.getElementById("quickScan").onclick=function(){pendingReceipt={qr:"",startedFromList:null};page("receipt");setTimeout(startQrScan,250)};
+document.getElementById("scanForList").onclick=function(){var l=cur();pendingReceipt={qr:"",startedFromList:l?l.id:null};page("receipt");setTimeout(startQrScan,250)};
 document.getElementById("closeList").onclick=function(){var l=cur();if(!l)return;l.status="closed";l.closedAt=new Date().toISOString();save();page("home");toast("Lista encerrada.")};
 document.querySelectorAll(".nav button").forEach(function(b){b.onclick=function(){if(b.dataset.p==="list"&&!cur())return toast("Abra uma lista primeiro.");page(b.dataset.p)}});
 
-async function startCam(){
-  var msg=document.getElementById("camMsg"),video=document.getElementById("video");msg.textContent="";
-  if(!isSecureContext){msg.textContent="Este navegador não considera a página segura. Abra o link HTTPS diretamente no Safari/Chrome.";return}
-  if(!window.ZXing||!ZXing.BrowserMultiFormatReader){msg.textContent="O leitor ZXing não carregou. Verifique a internet.";return}
-  stopCam();reader=new ZXing.BrowserMultiFormatReader();video.classList.add("on");msg.textContent="Aponte para o QR Code da NFC-e.";
-  try{
-    await reader.decodeFromConstraints({audio:false,video:{facingMode:{ideal:"environment"},width:{ideal:1920},height:{ideal:1080}}},video,function(result){
-      if(result){var v=typeof result.getText==="function"?result.getText():result.text;if(v){document.getElementById("qrText").value=v;pendingReceipt=pendingReceipt||{};pendingReceipt.qr=v;msg.textContent="QR Code lido com sucesso.";stopCam();toast("QR Code reconhecido.");setTimeout(openLinkModal,300)}}
-    })
-  }catch(e){stopCam();msg.textContent="Não foi possível abrir a câmera: "+(e&&e.name?e.name:"erro")+". Verifique a permissão do navegador."}
+async function loadZxingScanner(){
+  if(window.ZXingBrowser?.BrowserQRCodeReader)return window.ZXingBrowser;
+  if(window.__zxingQrLoading)return window.__zxingQrLoading;
+  window.__zxingQrLoading=new Promise((res,rej)=>{
+    const s=document.createElement('script');
+    s.src='https://unpkg.com/@zxing/browser@0.1.4/umd/zxing-browser.min.js';
+    s.async=true;
+    const tm=setTimeout(()=>rej(Error('ZXING_QR_LOAD_TIMEOUT')),12000);
+    s.onload=()=>{clearTimeout(tm);window.ZXingBrowser?.BrowserQRCodeReader?res(window.ZXingBrowser):rej(Error('ZXING_QR_NOT_LOADED'))};
+    s.onerror=()=>{clearTimeout(tm);rej(Error('ZXING_QR_LOAD_FAILED'))};
+    document.head.appendChild(s);
+  }).finally(()=>{window.__zxingQrLoading=null});
+  return window.__zxingQrLoading;
 }
-function stopCam(){try{if(reader)reader.reset()}catch(e){}reader=null;var v=document.getElementById("video");if(v&&v.srcObject){try{v.srcObject.getTracks().forEach(function(t){t.stop()})}catch(e){}v.srcObject=null}if(v)v.classList.remove("on")}
-document.getElementById("scan").onclick=startCam;
-document.getElementById("qrPhoto").onchange=function(e){var f=e.target.files&&e.target.files[0],msg=document.getElementById("camMsg");if(!f)return;if(!window.ZXing)return msg.textContent="ZXing não carregou.";var u=URL.createObjectURL(f),img=new Image();img.onload=async function(){try{var r=new ZXing.BrowserMultiFormatReader(),res=await r.decodeFromImage(img),v=typeof res.getText==="function"?res.getText():res.text;document.getElementById("qrText").value=v;pendingReceipt=pendingReceipt||{};pendingReceipt.qr=v;msg.textContent="QR Code reconhecido pela foto.";toast("QR Code reconhecido.");openLinkModal()}catch(x){msg.textContent="Não reconheci o QR. Tente enquadrar somente o QR, sem reflexo."}finally{URL.revokeObjectURL(u)}};img.src=u};
+async function stopQrScan(){
+  qrScanDone=true;
+  if(qrZxingControls){try{await Promise.resolve(qrZxingControls.stop())}catch{}qrZxingControls=null}
+  qrZxingReader=null;
+  const host=document.getElementById('qrReader');if(host)host.innerHTML='';
+  document.getElementById('qrScanModal')?.classList.remove('on');
+}
+async function finishQrScan(raw){
+  if(qrScanDone)return;
+  const text=String(raw||'').trim();
+  if(!text)return;
+  qrScanDone=true;
+  document.getElementById('qrText').value=text;
+  pendingReceipt=pendingReceipt||{};
+  pendingReceipt.qr=text;
+  document.getElementById('camMsg').textContent='QR Code reconhecido.';
+  const controls=qrZxingControls;qrZxingControls=null;qrZxingReader=null;
+  try{controls?.stop?.()}catch{}
+  const host=document.getElementById('qrReader');if(host)host.innerHTML='';
+  document.getElementById('qrScanModal')?.classList.remove('on');
+  toast('QR Code reconhecido.');
+  setTimeout(openLinkModal,180);
+}
+async function startQrScan(){
+  const status=document.getElementById('qrScanStatus');
+  const msg=document.getElementById('camMsg');
+  try{
+    await stopQrScan();
+    qrScanDone=false;
+    document.getElementById('qrScanModal').classList.add('on');
+    status.textContent='Abrindo scanner…';
+    msg.textContent='';
+    const ZX=await loadZxingScanner();
+    const host=document.getElementById('qrReader');
+    host.innerHTML='<div class="qr-video-wrap"><video id="qrZxingVideo" playsinline muted autoplay></video><i class="qr-guide"></i></div>';
+    const video=document.getElementById('qrZxingVideo');
+    qrZxingReader=new ZX.BrowserMultiFormatReader();
+    let controlsRef=null;
+    const controls=await qrZxingReader.decodeFromConstraints(
+      {audio:false,video:{facingMode:{ideal:'environment'}}},
+      video,
+      (result,error,ctrl)=>{
+        if(!result||qrScanDone)return;
+        controlsRef=ctrl||controlsRef;
+        qrZxingControls=controlsRef||qrZxingControls;
+        const text=typeof result.getText==='function'?result.getText():(result.text||String(result));
+        finishQrScan(text).catch(e=>{
+          console.error('Conclusão do QR',e);
+          status.textContent='O QR foi reconhecido, mas ocorreu um erro ao concluir a leitura.';
+        });
+      }
+    );
+    controlsRef=controls;
+    if(qrScanDone){try{controls.stop()}catch{}return}
+    qrZxingControls=controls;
+    const track=video.srcObject?.getVideoTracks?.()[0];
+    const settings=track?.getSettings?.()||{};
+    try{
+      const caps=track?.getCapabilities?.()||{};
+      if(Array.isArray(caps.focusMode)&&caps.focusMode.includes('continuous')){
+        await track.applyConstraints({advanced:[{focusMode:'continuous'}]});
+      }
+    }catch{}
+    status.textContent='Scanner ativo'+(settings.width&&settings.height?' · '+settings.width+'×'+settings.height:'')+' · mantenha o QR dentro da moldura.';
+  }catch(e){
+    console.error('Scanner ZXing',e);
+    await stopQrScan();
+    msg.textContent='Não foi possível abrir o leitor: '+(e?.message||e);
+  }
+}
+document.getElementById("scan").onclick=startQrScan;
+document.getElementById("qrClose").onclick=()=>stopQrScan();
 document.getElementById("continueReceipt").onclick=function(){var q=document.getElementById("qrText").value.trim();if(!q)return toast("Escaneie ou informe o QR primeiro.");pendingReceipt=pendingReceipt||{};pendingReceipt.qr=q;openLinkModal()};
 
 function openLinkModal(){
-  stopCam();var d=today();document.getElementById("purchaseDate").value=d;document.getElementById("marketName").value="";document.getElementById("purchaseName").value="Compra - "+fmtDate(d);var sel=document.getElementById("listLink");sel.innerHTML="<option value=''>Compra avulsa</option>";openLists().forEach(function(l){var o=document.createElement("option");o.value=l.id;o.textContent=l.name;sel.appendChild(o)});if(pendingReceipt&&pendingReceipt.startedFromList)sel.value=pendingReceipt.startedFromList;creatingList=false;document.getElementById("createListBox").classList.add("hidden");document.getElementById("linkModal").classList.add("on")
+  stopQrScan();var d=today();document.getElementById("purchaseDate").value=d;document.getElementById("marketName").value="";document.getElementById("purchaseName").value="Compra - "+fmtDate(d);var sel=document.getElementById("listLink");sel.innerHTML="<option value=''>Compra avulsa</option>";openLists().forEach(function(l){var o=document.createElement("option");o.value=l.id;o.textContent=l.name;sel.appendChild(o)});if(pendingReceipt&&pendingReceipt.startedFromList)sel.value=pendingReceipt.startedFromList;creatingList=false;document.getElementById("createListBox").classList.add("hidden");document.getElementById("linkModal").classList.add("on")
 }
 function suggestName(){var m=document.getElementById("marketName").value.trim()||"Compra",d=document.getElementById("purchaseDate").value;document.getElementById("purchaseName").value=m+" - "+fmtDate(d)}
 document.getElementById("marketName").addEventListener("input",suggestName);document.getElementById("purchaseDate").addEventListener("change",suggestName);
@@ -194,7 +284,7 @@ document.getElementById("compare").onclick=function(){if(!pendingReceipt)return;
 function reconcilePreview(l,rec){var used={},matched=[];var candidates=l.items.filter(function(i){return (Number(i.boughtQty)||0)<(Number(i.qty)||1)&&!i.skipReason});candidates.forEach(function(li){var best=-1,bs=0;rec.forEach(function(r,i){if(used[i])return;var s=score(li.name,r.name);if(s>bs){bs=s;best=i}});if(best>=0&&bs>=.5){used[best]=1;matched.push({itemId:li.id,listName:li.name,planned:li.qty,already:li.boughtQty||0,rec:rec[best],score:bs})}});return{matched:matched,missing:candidates.filter(function(li){return !matched.some(function(m){return m.itemId===li.id})}),extra:rec.filter(function(r,i){return !used[i]})}}
 function showRecon(r){var w=document.getElementById("recon");function block(t,c,a,f){var h="<div class='blockx'><b class='"+c+"'>"+t+" ("+a.length+")</b>";a.forEach(function(x){h+="<div class='meta' style='margin-top:6px'>"+f(x)+"</div>"});return h+"</div>"}w.innerHTML=block("Da lista e encontrados","ok",r.matched,function(m){return esc(m.listName)+" ← "+esc(m.rec.name)+" · qtd "+m.rec.qty})+block("Ainda faltando","warn",r.missing,function(x){return esc(x.name)})+block("Comprados fora da lista","badtext",r.extra,function(x){return esc(x.name)+" · R$ "+x.total.toFixed(2).replace(".",",")})}
 document.getElementById("savePurchase").onclick=function(){if(!pendingReceipt)return;pendingReceipt.market=document.getElementById("detailMarket").value.trim();pendingReceipt.date=document.getElementById("detailDate").value||today();pendingReceipt.name=document.getElementById("detailName").value.trim()||pendingReceipt.name;pendingReceipt.items=parseItems(document.getElementById("receiptItems").value);var l=state.lists.find(function(x){return x.id===pendingReceipt.listId});if(l){pendingReceipt.listName=l.name;if(!pendingReceipt.recon)pendingReceipt.recon=reconcilePreview(l,pendingReceipt.items);pendingReceipt.recon.matched.forEach(function(m){var it=l.items.find(function(x){return x.id===m.itemId});if(it){it.boughtQty=(Number(it.boughtQty)||0)+(Number(m.rec.qty)||1);it.skipReason=""}});l.purchases=l.purchases||[];l.purchases.push(JSON.parse(JSON.stringify(pendingReceipt)));state.current=l.id}else{state.standalonePurchases=state.standalonePurchases||[];state.standalonePurchases.push(JSON.parse(JSON.stringify(pendingReceipt)))}save();document.getElementById("detailModal").classList.remove("on");document.getElementById("qrText").value="";pendingReceipt=null;if(l)page("list");else page("history");toast("Compra salva.")};
-window.addEventListener("beforeunload",stopCam);render();
+window.addEventListener("beforeunload",()=>{stopQrScan().catch(()=>{})});render();
 })();
 </script>
 </body></html>
