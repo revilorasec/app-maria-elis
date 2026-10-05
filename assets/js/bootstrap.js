@@ -1,12 +1,8 @@
 const params = new URLSearchParams(location.search);
-const next = params.get('mode') !== 'legacy';
+const mode = params.get('mode') || 'stable';
 
 async function start() {
-  if (next) {
-    await import('./next/app-next.js?v=20');
-    await import('./next/medical-appointments-quick-v26.js?v=27');
-    await import('./next/pwa-install-v24.js?v=24');
-  } else {
+  if (mode === 'legacy') {
     await new Promise((resolve, reject) => {
       const script = document.createElement('script');
       script.src = 'https://cdn.jsdelivr.net/npm/@azure/msal-browser@2.38.4/lib/msal-browser.min.js';
@@ -16,7 +12,15 @@ async function start() {
       document.head.append(script);
     });
     await import('./app.js?v=19');
+  } else if (mode === 'full') {
+    await import('./next/app-next.js?v=20');
+    await import('./next/medical-appointments-quick-v26.js?v=27');
+    await import('./next/pwa-install-v24.js?v=24');
+  } else {
+    await import('./next/app-stable-v1.js?v=1');
+    await import('./next/pwa-install-v24.js?v=24');
   }
+
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('./service-worker.js').catch((error) => console.warn('Service worker:', error));
   }
