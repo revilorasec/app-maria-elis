@@ -74,7 +74,7 @@ async function openList() {
     closeOverlay();
     overlay = document.createElement('div');
     overlay.className = 'medical-quick-overlay';
-    overlay.innerHTML = `<section class="medical-quick-panel" role="dialog" aria-modal="true">
+    overlay.innerHTML = `<section class="medical-quick-panel medical-quick-panel--page" role="dialog" aria-modal="true">
       <header class="medical-quick-header">
         <div><p>Saúde</p><h2>Consultas médicas</h2></div>
         <button type="button" class="medical-quick-close" data-medical-quick-close>×</button>
@@ -94,7 +94,7 @@ function openEditor(id = '') {
   closeOverlay();
   overlay = document.createElement('div');
   overlay.className = 'medical-quick-overlay';
-  overlay.innerHTML = `<section class="medical-quick-panel medical-quick-panel--form" role="dialog" aria-modal="true">
+  overlay.innerHTML = `<section class="medical-quick-panel medical-quick-panel--page medical-quick-panel--form" role="dialog" aria-modal="true">
     <header class="medical-quick-header">
       <div><p>Consultas médicas</p><h2>${row ? 'Editar consulta' : 'Nova consulta'}</h2></div>
       <button type="button" class="medical-quick-close" data-medical-quick-close>×</button>
@@ -181,13 +181,34 @@ function enhance() {
   }
 }
 
+function consumeMedicalClick(event) {
+  event.preventDefault();
+  event.stopPropagation();
+  event.stopImmediatePropagation();
+}
+
 document.addEventListener('click', (event) => {
-  if (event.target.closest('[data-medical-quick-open]')) { event.preventDefault(); return openList(); }
-  if (event.target.closest('[data-medical-quick-close]')) { event.preventDefault(); return closeOverlay(); }
-  if (event.target.closest('[data-medical-quick-new]')) { event.preventDefault(); return openEditor(); }
+  if (event.target.closest('[data-medical-quick-open]')) {
+    consumeMedicalClick(event);
+    return openList();
+  }
+  if (event.target.closest('[data-medical-quick-close]')) {
+    consumeMedicalClick(event);
+    return closeOverlay();
+  }
+  if (event.target.closest('[data-medical-quick-new]')) {
+    consumeMedicalClick(event);
+    return openEditor();
+  }
   const edit = event.target.closest('[data-medical-quick-edit]');
-  if (edit) { event.preventDefault(); return openEditor(edit.dataset.medicalQuickEdit || ''); }
-  if (event.target.closest('[data-medical-quick-back]')) { event.preventDefault(); return openList(); }
+  if (edit) {
+    consumeMedicalClick(event);
+    return openEditor(edit.dataset.medicalQuickEdit || '');
+  }
+  if (event.target.closest('[data-medical-quick-back]')) {
+    consumeMedicalClick(event);
+    return openList();
+  }
 }, true);
 
 document.addEventListener('submit', async (event) => {
@@ -201,9 +222,9 @@ const style = document.createElement('style');
 style.textContent = `
 .medical-quick-feature{appearance:none;border:1px solid var(--border,rgba(58,87,82,.18));background:var(--surface,#fff);border-radius:18px;padding:1rem;text-align:left;display:flex;align-items:center;gap:.8rem;min-height:92px;color:inherit;font:inherit;cursor:pointer;width:100%;box-shadow:0 8px 24px rgba(41,62,58,.06)}
 .medical-quick-feature>span{width:42px;height:42px;border-radius:14px;display:grid;place-items:center;background:rgba(47,111,102,.12);font-size:1.25rem;color:#2f6f66}.medical-quick-feature strong,.medical-quick-feature small{display:block}.medical-quick-feature small{margin-top:.28rem;opacity:.72}
-.medical-quick-overlay{position:fixed;inset:0;z-index:10000;background:rgba(17,28,26,.6);display:flex;align-items:flex-end;justify-content:center}.medical-quick-panel{width:min(760px,100%);max-height:95dvh;overflow:auto;background:var(--surface,#fff);color:var(--text,#20302d);border-radius:24px 24px 0 0;padding:1rem 1rem max(1rem,env(safe-area-inset-bottom))}.medical-quick-panel--form{width:min(620px,100%)}
+.medical-quick-overlay{position:fixed;inset:0;z-index:10000;background:var(--surface,#fff);overflow:auto}.medical-quick-panel{width:min(980px,100%);min-height:100dvh;margin:0 auto;overflow:visible;background:var(--surface,#fff);color:var(--text,#20302d);border-radius:0;padding:clamp(1rem,3vw,2rem) clamp(1rem,4vw,2.5rem) max(2rem,env(safe-area-inset-bottom));box-shadow:none}.medical-quick-panel--form{width:min(760px,100%)}.medical-quick-panel--page .medical-quick-header{position:sticky;top:0;z-index:2;background:var(--surface,#fff)}
 .medical-quick-header{display:flex;justify-content:space-between;align-items:flex-start;gap:1rem;border-bottom:1px solid var(--border,rgba(58,87,82,.12));padding:.5rem 0 1rem}.medical-quick-header p{margin:0;text-transform:uppercase;letter-spacing:.08em;font-size:.72rem;font-weight:700;color:#2f6f66}.medical-quick-header h2{margin:.15rem 0}.medical-quick-close{border:0;background:transparent;font-size:2rem;line-height:1;color:inherit}.medical-quick-toolbar{padding:1rem 0}.medical-quick-list{display:grid;gap:.75rem}.medical-quick-card{border:1px solid var(--border,rgba(58,87,82,.14));border-radius:16px;padding:1rem;display:flex;align-items:center;justify-content:space-between;gap:1rem}.medical-quick-card h3{margin:.2rem 0}.medical-quick-card p,.medical-quick-card small{margin:0;opacity:.75}.medical-quick-form{display:grid;gap:1rem;padding:1rem 0}.medical-quick-form label{display:grid;gap:.4rem;font-weight:700}.medical-quick-form input{width:100%;box-sizing:border-box;border:1px solid var(--border,rgba(58,87,82,.22));background:var(--surface,#fff);color:inherit;border-radius:12px;padding:.9rem;font:inherit}.medical-quick-required,.medical-quick-optional{font-size:.72rem;font-weight:600;opacity:.62}.medical-quick-required{color:#2f6f66;opacity:1}.medical-quick-footer{display:flex;gap:.75rem;justify-content:flex-end;margin-top:.5rem}.medical-quick-toast-region{position:fixed;z-index:14000;top:16px;left:50%;transform:translateX(-50%);display:grid;gap:.5rem;width:min(92vw,520px)}.medical-quick-toast{padding:12px 16px;border-radius:12px;background:#225d54;color:#fff;font-weight:700;box-shadow:0 12px 32px rgba(0,0,0,.25)}.medical-quick-toast--error{background:#9b2c2c}
-@media (max-width:640px){.medical-quick-panel{border-radius:0;width:100%;height:100dvh;max-height:100dvh}.medical-quick-card{align-items:flex-start}.medical-quick-footer{position:sticky;bottom:0;background:var(--surface,#fff);padding:.75rem 0}.medical-quick-footer .button{flex:1}}
+@media (max-width:640px){.medical-quick-panel{width:100%;min-height:100dvh;padding:1rem 1rem max(1rem,env(safe-area-inset-bottom))}.medical-quick-card{align-items:flex-start}.medical-quick-footer{position:sticky;bottom:0;background:var(--surface,#fff);padding:.75rem 0}.medical-quick-footer .button{flex:1}}
 `;
 document.head.append(style);
 
