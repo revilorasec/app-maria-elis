@@ -1,5 +1,5 @@
 const params = new URLSearchParams(location.search);
-const mode = params.get('mode') || 'stable';
+const mode = params.get('mode') || 'full';
 
 async function start() {
   if (mode === 'legacy') {
@@ -12,12 +12,12 @@ async function start() {
       document.head.append(script);
     });
     await import('./app.js?v=19');
-  } else if (mode === 'full') {
-    await import('./next/app-next.js?v=20');
-    await import('./next/medical-appointments-quick-v26.js?v=27');
+  } else if (mode === 'stable') {
+    await import('./next/app-stable-v1.js?v=1');
     await import('./next/pwa-install-v24.js?v=24');
   } else {
-    await import('./next/app-stable-v1.js?v=1');
+    await import('./next/app-next.js?v=20');
+    await import('./next/medical-appointments-quick-v26.js?v=27');
     await import('./next/pwa-install-v24.js?v=24');
   }
 
