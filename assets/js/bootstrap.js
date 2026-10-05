@@ -17,7 +17,7 @@ async function start() {
     await import('./next/pwa-install-v24.js?v=24');
   } else {
     await import('./next/app-next.js?v=20');
-    await import('./next/medical-appointments-quick-v26.js?v=28');
+    await import('./next/medical-appointments-v23.js?v=24');
     await import('./next/pwa-install-v24.js?v=24');
   }
 
