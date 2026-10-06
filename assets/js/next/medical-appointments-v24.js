@@ -78,7 +78,7 @@ async function loadAppointments() {
 async function loadCareItems(appointmentId) {
   if (!appointmentId) return { medications: [], exams: [] };
   const [meds, exams] = await Promise.all([
-    supabase.from('medications').select('*,medication_schedules(*)').eq('source_appointment_id',appointmentId).order('created_at',{ascending:true}),
+    supabase.from('medications').select('*,medication_schedules(*)').eq('source_appointment_id',appointmentId).eq('active',true).order('created_at',{ascending:true}),
     supabase.from('medical_appointment_exams').select('*').eq('appointment_id',appointmentId).order('created_at',{ascending:true}),
   ]);
   if (meds.error) throw meds.error;
