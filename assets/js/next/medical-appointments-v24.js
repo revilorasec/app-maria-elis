@@ -1,8 +1,8 @@
 
 import { supabase, currentSession } from './supabase.js?v=20';
 import { uploadFile } from './file-picker.js?v=20';
-import { syncMedicationTasks } from './care-service.js?v=20';
-import { enableMedicationAlerts, scheduleMedicationRemindersForMedication } from './medication-reminders.js?v=1';
+import { syncMedicationTasks } from './care-service.js?v=21';
+import { enableMedicationAlerts, scheduleMedicationRemindersForMedication } from './medication-reminders.js?v=2';
 
 let overlay = null;
 let appointments = [];
@@ -34,10 +34,10 @@ function numText(raw) {
   return Number.isFinite(n) ? String(n) : '';
 }
 function todayIso() { return new Date().toISOString().slice(0,10); }
-function tomorrowNine() {
+function endOfTodayIso() {
   const d = new Date();
-  d.setDate(d.getDate()+1); d.setHours(9,0,0,0);
-  return localDateTimeValue(d);
+  d.setHours(23,59,0,0);
+  return d.toISOString();
 }
 function formatDateTime(value) {
   if (!value) return 'Data não informada';
@@ -152,8 +152,8 @@ function examItemMarkup(item={}, index=nextExamIndex++) {
     <div class="medical-v24-item-head"><strong>Exame solicitado</strong><button type="button" class="medical-v24-remove" data-exam-remove>Remover</button></div>
     <label>Exame<input data-exam-name value="${attr(item.name||'')}" placeholder="Ex.: Hemograma"></label>
     <label>Orientações<textarea data-exam-instructions rows="2" placeholder="Jejum, laboratório, preparo...">${esc(item.instructions||'')}</textarea></label>
-    <label>Prazo / quando fazer<input type="datetime-local" data-exam-due value="${attr(item.due_at ? localDateTimeValue(item.due_at) : tomorrowNine())}"></label>
-    <p class="medical-v24-helper">Este exame aparecerá como tarefa até ser concluído.</p>
+    <label>Lembrar em / prazo <span class="medical-v24-optional">opcional</span><input type="datetime-local" data-exam-due value="${attr(item.due_at ? localDateTimeValue(item.due_at) : '')}"></label>
+    <p class="medical-v24-helper">Mesmo sem prazo, o exame entra nas tarefas de hoje como pendência.</p>
   </article>`;
 }
 function formMarkup(row, care) {
@@ -164,6 +164,8 @@ function formMarkup(row, care) {
     <input type="hidden" name="id" value="${attr(row?.id||'')}">
     <input type="hidden" name="legacy_prescribed_medications" value="${attr(row?.prescribed_medications||'')}">
     <input type="hidden" name="legacy_ordered_exams" value="${attr(row?.ordered_exams||'')}">
+    <input type="hidden" name="had_structured_medications" value="${meds.length ? '1' : '0'}">
+    <input type="hidden" name="had_structured_exams" value="${exams.length ? '1' : '0'}">
 
     ${section('1. Consulta','Informações do agendamento.',`
       <div class="medical-v24-grid medical-v24-grid--2">
@@ -331,13 +333,12 @@ async function syncExams(appointment, items, ctx) {
   const kept = new Set();
   for (const item of items) {
     if (!item.name) throw new Error('Informe o nome de cada exame adicionado.');
-    const dueAt = item.due_at || isoOrEmpty(tomorrowNine());
+    const dueAt = item.due_at || endOfTodayIso();
     let taskId = item.task_id || null;
     const taskPayload = {
       family_id: ctx.family_id,
       title: 'Realizar exame: ' + item.name,
       due_at: dueAt,
-      status: 'pending',
       note: '',
       task_kind: 'other',
       instructions: item.instructions,
@@ -352,7 +353,7 @@ async function syncExams(appointment, items, ctx) {
       if (!taskUpdate.data?.id) taskId = null;
     }
     if (!taskId) {
-      const taskInsert = await supabase.from('care_tasks').insert(taskPayload).select('id').single();
+      const taskInsert = await supabase.from('care_tasks').insert({...taskPayload,status:'pending'}).select('id').single();
       if (taskInsert.error) throw taskInsert.error;
       taskId = taskInsert.data.id;
     }
@@ -396,8 +397,14 @@ async function save(form) {
     const f = new FormData(form);
     const specialty = String(f.get('specialty')||'').trim();
     if (!specialty) throw new Error('Informe pelo menos a especialidade.');
-    const medSummary = medicationItems.length ? medicationItems.map(x=>[x.name,x.dose,x.times.join('/')].filter(Boolean).join(' — ')).join('\n') : String(f.get('legacy_prescribed_medications')||'').trim();
-    const examSummary = examItems.length ? examItems.map(x=>x.name).join('\n') : String(f.get('legacy_ordered_exams')||'').trim();
+    const hadStructuredMeds = String(f.get('had_structured_medications')||'') === '1';
+    const hadStructuredExams = String(f.get('had_structured_exams')||'') === '1';
+    const medSummary = medicationItems.length
+      ? medicationItems.map(x=>[x.name,x.dose,x.times.join('/')].filter(Boolean).join(' — ')).join('\n')
+      : (hadStructuredMeds ? '' : String(f.get('legacy_prescribed_medications')||'').trim());
+    const examSummary = examItems.length
+      ? examItems.map(x=>x.name).join('\n')
+      : (hadStructuredExams ? '' : String(f.get('legacy_ordered_exams')||'').trim());
     const payload = {
       id: String(f.get('id')||'').trim() || null,
       family_id: ctx.family_id,
@@ -423,7 +430,8 @@ async function save(form) {
     };
     const result = await supabase.rpc('save_medical_appointment',{payload});
     if (result.error) throw result.error;
-    const appointment = result.data;
+    const appointment = Array.isArray(result.data) ? result.data[0] : result.data;
+    if (!appointment?.id) throw new Error('A consulta foi salva, mas não retornou o identificador do registro.');
     await syncMedications(appointment,medicationItems,ctx);
     await syncExams(appointment,examItems,ctx);
     await alertsPromise;
