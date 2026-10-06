@@ -1694,110 +1694,73 @@ function bind() {
       if (!Number.isInteger(intervalHours) || intervalHours < 1 || intervalHours > 168) throw new Error('Informe um intervalo válido em horas.');
       if (!Number.isInteger(durationDays) || durationDays < 1 || durationDays > 365) throw new Error('Informe por quantos dias o medicamento será administrado.');
 
-      const doses = standaloneMedicationDoseDates(firstDoseRaw, intervalHours, durationDays);
-      if (!doses.length) throw new Error('Não foi possível calcular as doses.');
-      const lastDose = doses[doses.length - 1];
-      const kind = String(form.get('kind') || 'temporary');
-      const instructions = String(form.get('instructions') || '').trim();
       const dose = String(form.get('dose') || '').trim();
       const route = String(form.get('route') || '').trim();
-
-      const medicationResult = await supabase.from('medications').insert({
-        family_id: state.context.membership.family_id,
-        name,
-        kind,
-        dose,
-        route,
-        guidance: instructions,
-        starts_on: dateOnly(firstDose),
-        ends_on: kind === 'continuous' ? null : dateOnly(lastDose),
-        frequency: 'scheduled',
-        frequency_description: `A cada ${intervalHours} hora(s) por ${durationDays} dia(s)`,
-        first_dose_at: firstDose.toISOString(),
-        interval_hours: intervalHours,
-        duration_days: durationDays,
-        active: true,
-        created_by: state.context.session.user.id,
-        updated_by: state.context.session.user.id,
-      }).select().single();
-      if (medicationResult.error) throw medicationResult.error;
-      let medication = medicationResult.data;
-
-      const uniqueTimes = [...new Set(doses.map((date) => `${String(date.getHours()).padStart(2,'0')}:${String(date.getMinutes()).padStart(2,'0')}`))];
-      const scheduleResult = await supabase.from('medication_schedules').insert(uniqueTimes.map((time) => ({
-        medication_id: medication.id,
-        time_of_day: time,
-        active: true,
-      }))).select('*');
-      if (scheduleResult.error) throw scheduleResult.error;
-      const scheduleByTime = new Map((scheduleResult.data || []).map((row) => [String(row.time_of_day || '').slice(0,5), row.id]));
-
-      const now = Date.now();
-      const taskInstructions = [
-        dose ? 'Dose: ' + dose : '',
-        route ? 'Via: ' + route : '',
-        instructions,
-      ].filter(Boolean).join(' · ');
-      const taskRows = doses.map((due, index) => {
-        const time = `${String(due.getHours()).padStart(2,'0')}:${String(due.getMinutes()).padStart(2,'0')}`;
-        const firstAlreadyGiven = index === 0 && due.getTime() <= now;
-        return {
+      const instructions = String(form.get('instructions') || '').trim();
+      const kind = String(form.get('kind') || 'temporary');
+      const saveResult = await supabase.rpc('save_medication_regimen', {
+        payload: {
           family_id: state.context.membership.family_id,
-          medication_id: medication.id,
-          schedule_id: scheduleByTime.get(time) || null,
-          title: 'Administrar ' + name,
-          due_at: due.toISOString(),
-          status: firstAlreadyGiven ? 'completed' : 'pending',
-          completed_at: firstAlreadyGiven ? due.toISOString() : null,
-          completed_by: firstAlreadyGiven ? state.context.session.user.id : null,
-          note: firstAlreadyGiven ? 'Primeira dose informada como já administrada no cadastro do medicamento.' : '',
-          task_kind: 'medication',
-          instructions: taskInstructions,
-          assigned_role: 'caregiver',
-          requires_photo: false,
-          requires_note: false,
-          priority: 2,
-        };
+          name,
+          kind,
+          dose,
+          route,
+          guidance: instructions,
+          first_dose_at: firstDose.toISOString(),
+          interval_hours: intervalHours,
+          duration_days: durationDays,
+          timezone_offset_minutes: new Date().getTimezoneOffset(),
+        },
       });
-      const taskResult = await supabase.from('care_tasks').insert(taskRows);
-      if (taskResult.error) throw taskResult.error;
+      if (saveResult.error) throw saveResult.error;
+      let medication = Array.isArray(saveResult.data) ? saveResult.data[0] : saveResult.data;
+      if (!medication?.id) throw new Error('O banco não confirmou o salvamento do medicamento.');
 
-      const photoIds = [];
-      for (let index = 1; index <= 4; index += 1) {
-        const file = document.querySelector(`#medication-photo-${index}`)?.files?.[0];
-        if (!file) continue;
-        const uploaded = await uploadFile(file, {
-          fileType: 'medication-photo',
-          category: 'medication',
-          relatedRecordType: 'medication',
-          relatedRecordId: medication.id,
-        });
-        if (uploaded?.id) photoIds.push(uploaded.id);
+      let attachmentWarning = '';
+      try {
+        const photoIds = [];
+        for (let index = 1; index <= 4; index += 1) {
+          const file = document.querySelector(`#medication-photo-${index}`)?.files?.[0];
+          if (!file) continue;
+          const uploaded = await uploadFile(file, {
+            fileType: 'medication-photo',
+            category: 'medication',
+            relatedRecordType: 'medication',
+            relatedRecordId: medication.id,
+          });
+          if (uploaded?.id) photoIds.push(uploaded.id);
+        }
+        const leaflet = document.querySelector('#medication-leaflet')?.files?.[0];
+        let leafletFileId = null;
+        if (leaflet) {
+          const uploaded = await uploadFile(leaflet, {
+            fileType: 'medication-leaflet',
+            category: 'medication',
+            relatedRecordType: 'medication',
+            relatedRecordId: medication.id,
+          });
+          leafletFileId = uploaded?.id || null;
+        }
+        if (photoIds.length || leafletFileId) {
+          const updateResult = await supabase.from('medications').update({
+            photo_file_ids: photoIds.slice(0,4),
+            leaflet_file_id: leafletFileId,
+            updated_by: state.context.session.user.id,
+          }).eq('id', medication.id).select('*').single();
+          if (updateResult.error) throw updateResult.error;
+          medication = updateResult.data;
+        }
+      } catch (attachmentError) {
+        console.error('Falha nos anexos do medicamento', attachmentError);
+        attachmentWarning = 'O medicamento foi salvo, mas alguma foto ou bula não foi anexada.';
       }
-      const leaflet = document.querySelector('#medication-leaflet')?.files?.[0];
-      let leafletFileId = null;
-      if (leaflet) {
-        const uploaded = await uploadFile(leaflet, {
-          fileType: 'medication-leaflet',
-          category: 'medication',
-          relatedRecordType: 'medication',
-          relatedRecordId: medication.id,
-        });
-        leafletFileId = uploaded?.id || null;
-      }
-      if (photoIds.length || leafletFileId) {
-        const updateResult = await supabase.from('medications').update({
-          photo_file_ids: photoIds.slice(0,4),
-          leaflet_file_id: leafletFileId,
-          updated_by: state.context.session.user.id,
-        }).eq('id', medication.id).select('*').single();
-        if (updateResult.error) throw updateResult.error;
-        medication = updateResult.data;
-      }
+
+      const confirmation = await supabase.from('medications').select('id,name').eq('id', medication.id).maybeSingle();
+      if (confirmation.error || !confirmation.data?.id) throw confirmation.error || new Error('Não foi possível confirmar o medicamento salvo.');
 
       await enableMedicationAlerts().catch(() => false);
       await scheduleMedicationRemindersForMedication(medication.id).catch(() => {});
-
+      if (attachmentWarning) toast(attachmentWarning, 'warning');
       state.modal = null;
       state.page = 'agenda';
       await render();

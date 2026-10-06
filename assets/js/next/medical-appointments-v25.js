@@ -8,6 +8,7 @@ let context = null;
 let saving = false;
 let nextMedicationIndex = 0;
 let nextExamIndex = 0;
+let medicationCatalog = [];
 
 const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const attr = esc;
@@ -85,6 +86,18 @@ async function loadCareItems(appointmentId) {
   if (exams.error) throw exams.error;
   return { medications: meds.data || [], exams: exams.data || [] };
 }
+async function loadMedicationCatalog() {
+  const ctx = await getContext();
+  const result = await supabase.from('medications')
+    .select('*,medication_schedules(*)')
+    .eq('family_id',ctx.family_id)
+    .eq('active',true)
+    .order('name',{ascending:true});
+  if (result.error) throw result.error;
+  medicationCatalog = result.data || [];
+  return medicationCatalog;
+}
+
 function closeOverlay() {
   overlay?.remove();
   document.querySelectorAll('.medical-v25-overlay').forEach((node)=>node.remove());
@@ -174,13 +187,22 @@ function photoSlots(item) {
     </div>`;
   }).join('');
 }
+function medicationCatalogOptions(selected='') {
+  const options = medicationCatalog.map((row)=>`<option value="${attr(row.id)}" ${selected===row.id?'selected':''}>${esc(row.name)}${row.dose ? ' · '+esc(row.dose) : ''}</option>`).join('');
+  return `<option value="">Cadastrar novo / manter este</option>${options}`;
+}
 function medicationItemMarkup(item={}, index=nextMedicationIndex++) {
   const first = inferFirstDose(item);
   const interval = inferInterval(item);
   const days = inferDuration(item);
   return `<article class="medical-v25-item" data-med-item data-index="${index}">
     <input type="hidden" data-med-id value="${attr(item.id||'')}">
+    <input type="hidden" data-med-leaflet-existing value="${attr(item.leaflet_file_id||'')}">
     <div class="medical-v25-item-head"><strong>Medicamento</strong><button type="button" class="medical-v25-remove" data-med-remove>Remover</button></div>
+    <label>Escolher medicamento já cadastrado
+      <select data-med-catalog>${medicationCatalogOptions(item.catalog_source_id||'')}</select>
+      <small>Ao escolher, os dados cadastrados são usados como base desta prescrição.</small>
+    </label>
     <div class="medical-v25-grid medical-v25-grid--2">
       <label>Nome do medicamento<input data-med-name value="${attr(item.name||'')}" placeholder="Ex.: Amoxicilina"></label>
       <label>Dose<input data-med-dose value="${attr(item.dose||'')}" placeholder="Ex.: 5 ml"></label>
@@ -201,13 +223,24 @@ function medicationItemMarkup(item={}, index=nextMedicationIndex++) {
   </article>`;
 }
 function examItemMarkup(item={}, index=nextExamIndex++) {
+  const existingPhotos = Array.isArray(item.request_file_ids) ? item.request_file_ids.slice(0,4) : [];
   return `<article class="medical-v25-item" data-exam-item data-index="${index}">
     <input type="hidden" data-exam-id value="${attr(item.id||'')}">
     <input type="hidden" data-exam-task-id value="${attr(item.task_id||'')}">
+    ${existingPhotos.map((id)=>`<input type="hidden" data-exam-photo-existing value="${attr(id)}">`).join('')}
     <div class="medical-v25-item-head"><strong>Exame solicitado</strong><button type="button" class="medical-v25-remove" data-exam-remove>Remover</button></div>
     <label>Exame<input data-exam-name value="${attr(item.name||'')}" placeholder="Ex.: Hemograma"></label>
     <label>Orientações<textarea data-exam-instructions rows="2" placeholder="Jejum, laboratório, preparo...">${esc(item.instructions||'')}</textarea></label>
     <label>Lembrar em / prazo <span class="medical-v25-optional">opcional</span><input type="datetime-local" data-exam-due value="${attr(item.due_at ? localDateTimeValue(item.due_at) : '')}"></label>
+    <div class="medical-v25-exam-photos">
+      <span class="medical-v25-field-label">Fotos do pedido do exame — até 4</span>
+      ${existingPhotos.length ? `<div class="medical-v25-existing-files">${existingPhotos.map((id,i)=>`<button type="button" class="button button--secondary button--small" data-file-open="${attr(id)}">Foto ${i+1}</button>`).join('')}</div>` : ''}
+      <div class="medical-v25-grid medical-v25-grid--2">
+        <label class="medical-v25-file">Tirar foto<small>Abre a câmera no celular</small><input type="file" data-exam-camera accept="image/*" capture="environment"></label>
+        <label class="medical-v25-file">Escolher da galeria<small>Você pode selecionar várias</small><input type="file" data-exam-gallery accept="image/*" multiple></label>
+      </div>
+      <small data-exam-photo-count>${existingPhotos.length} de 4 foto(s)</small>
+    </div>
     <p class="medical-v25-helper">O exame entra na mesma Agenda do dia como tarefa pendente.</p>
   </article>`;
 }
@@ -273,7 +306,7 @@ async function openEditor(id='') {
   const row = id ? appointments.find(x=>x.id===id) : null;
   if (id && !row) return toast('Consulta não encontrada.',true);
   try {
-    const care = await loadCareItems(id);
+    const [care] = await Promise.all([loadCareItems(id), loadMedicationCatalog()]);
     closeOverlay();
     overlay = document.createElement('div');
     overlay.className = 'medical-v25-overlay';
@@ -292,6 +325,7 @@ function readMedicationItems(form) {
     first_dose_at: isoOrEmpty(node.querySelector('[data-med-first]')?.value || ''),
     interval_hours: Number(node.querySelector('[data-med-interval]')?.value || 0),
     duration_days: Number(node.querySelector('[data-med-days]')?.value || 0),
+    leafletExistingId: node.querySelector('[data-med-leaflet-existing]')?.value || '',
     photoSlots: [...node.querySelectorAll('.medical-v25-photo-slot')].map(slot=>({
       existingId: slot.querySelector('[data-med-photo-existing]')?.value || '',
       file: slot.querySelector('[data-med-photo]')?.files?.[0] || null,
@@ -301,12 +335,16 @@ function readMedicationItems(form) {
 }
 function readExamItems(form) {
   return [...form.querySelectorAll('[data-exam-item]')].map((node)=>({
+    node,
     id: node.querySelector('[data-exam-id]')?.value || '',
     task_id: node.querySelector('[data-exam-task-id]')?.value || '',
     name: node.querySelector('[data-exam-name]')?.value.trim() || '',
     instructions: node.querySelector('[data-exam-instructions]')?.value.trim() || '',
     due_at: isoOrEmpty(node.querySelector('[data-exam-due]')?.value || ''),
-  })).filter(x=>x.name || x.instructions);
+    existingPhotoIds: [...node.querySelectorAll('[data-exam-photo-existing]')].map(x=>x.value).filter(Boolean),
+    cameraFile: node.querySelector('[data-exam-camera]')?.files?.[0] || null,
+    galleryFiles: [...(node.querySelector('[data-exam-gallery]')?.files || [])],
+  })).filter(x=>x.name || x.instructions || x.cameraFile || x.galleryFiles.length);
 }
 async function uploadMedicationAttachments(item, medication, session) {
   const photoIds = [];
@@ -317,7 +355,11 @@ async function uploadMedicationAttachments(item, medication, session) {
       if (uploaded?.id) photoIds.push(uploaded.id);
     } else if (slot.existingId) photoIds.push(slot.existingId);
   }
-  const updates = { photo_file_ids: photoIds.slice(0,4), updated_by: session.user.id };
+  const updates = {
+    photo_file_ids: photoIds.slice(0,4),
+    leaflet_file_id: item.leafletExistingId || null,
+    updated_by: session.user.id
+  };
   const leaflet = item.leafletInput?.files?.[0];
   if (leaflet) {
     const uploaded = await uploadFile(leaflet,{fileType:'medication-leaflet',category:'medication',relatedRecordType:'medication',relatedRecordId:medication.id});
@@ -445,6 +487,8 @@ async function syncExams(appointment, items, ctx) {
   const kept = new Set();
   for (const item of items) {
     if (!item.name) throw new Error('Informe o nome de cada exame adicionado.');
+    const incomingPhotos = [item.cameraFile, ...item.galleryFiles].filter(Boolean);
+    if (item.existingPhotoIds.length + incomingPhotos.length > 4) throw new Error('Cada exame pode ter no máximo 4 fotos do pedido.');
     const dueAt = item.due_at || (()=>{const d=new Date();d.setHours(23,59,0,0);return d.toISOString();})();
     let taskId = item.task_id || null;
     const taskPayload = {
@@ -487,6 +531,18 @@ async function syncExams(appointment, items, ctx) {
       const result = await supabase.from('medical_appointment_exams').insert({...examPayload,created_by:ctx.session.user.id}).select('*').single();
       if (result.error) throw result.error;
       exam = result.data;
+    }
+    const requestIds = [...item.existingPhotoIds];
+    for (const file of incomingPhotos) {
+      const uploaded = await uploadFile(file,{fileType:'exam-request-photo',category:'health',relatedRecordType:'medical_appointment_exam',relatedRecordId:exam.id});
+      if (uploaded?.id) requestIds.push(uploaded.id);
+    }
+    if (incomingPhotos.length) {
+      const photoUpdate = await supabase.from('medical_appointment_exams')
+        .update({request_file_ids:requestIds.slice(0,4),updated_by:ctx.session.user.id})
+        .eq('id',exam.id).select('*').single();
+      if (photoUpdate.error) throw photoUpdate.error;
+      exam = photoUpdate.data;
     }
     kept.add(exam.id);
   }
@@ -664,11 +720,45 @@ document.addEventListener('input',(e)=>{
   if (item && (e.target.matches('[data-med-first]') || e.target.matches('[data-med-interval]') || e.target.matches('[data-med-days]'))) updateMedicationPreview(item);
 },true);
 document.addEventListener('change',(e)=>{
+  const catalogSelect = e.target.closest?.('[data-med-catalog]');
+  if (catalogSelect) {
+    const node = catalogSelect.closest('[data-med-item]');
+    const selected = medicationCatalog.find((row)=>row.id===catalogSelect.value);
+    if (node && selected) {
+      const index = Number(node.dataset.index || 0);
+      node.outerHTML = medicationItemMarkup({
+        ...selected,
+        id:'',
+        catalog_source_id:selected.id,
+        first_dose_at:null,
+        starts_on:null,
+        ends_on:null,
+      }, index);
+      return;
+    }
+  }
+  const examNode = e.target.closest?.('[data-exam-item]');
+  if (examNode && (e.target.matches('[data-exam-camera]') || e.target.matches('[data-exam-gallery]'))) {
+    const existing = examNode.querySelectorAll('[data-exam-photo-existing]').length;
+    const camera = examNode.querySelector('[data-exam-camera]')?.files?.length || 0;
+    const gallery = examNode.querySelector('[data-exam-gallery]')?.files?.length || 0;
+    const total = existing + camera + gallery;
+    const count = examNode.querySelector('[data-exam-photo-count]');
+    if (count) count.textContent = total + ' de 4 foto(s)';
+    if (total > 4) {
+      toast('Cada exame pode ter no máximo 4 fotos do pedido.',true);
+      e.target.value = '';
+      const newCamera = examNode.querySelector('[data-exam-camera]')?.files?.length || 0;
+      const newGallery = examNode.querySelector('[data-exam-gallery]')?.files?.length || 0;
+      if (count) count.textContent = (existing + newCamera + newGallery) + ' de 4 foto(s)';
+    }
+    return;
+  }
   const input=e.target;
   if (!(input instanceof HTMLInputElement) || input.type!=='file') return;
   const label=input.closest('label');
   const small=label?.querySelector('small');
-  if (small && input.files?.length) small.textContent=input.files[0].name;
+  if (small && input.files?.length) small.textContent=input.files.length>1 ? input.files.length+' arquivos selecionados' : input.files[0].name;
 },true);
 document.addEventListener('submit',async(e)=>{
   if(e.target?.id!=='medical-v25-form') return;
@@ -681,8 +771,8 @@ function styles(){
   const s=document.createElement('style');s.id='medical-v25-styles';s.textContent=`
 .medical-v25-feature{appearance:none;border:1px solid var(--border,rgba(58,87,82,.18));background:var(--surface,#fff);border-radius:18px;padding:1rem;text-align:left;display:flex;align-items:center;gap:.8rem;min-height:92px;color:inherit;font:inherit;cursor:pointer;width:100%;box-shadow:0 8px 24px rgba(41,62,58,.06)}.medical-v25-feature>span{width:42px;height:42px;border-radius:14px;display:grid;place-items:center;background:rgba(47,111,102,.12);font-size:1.25rem;color:#2f6f66}.medical-v25-feature strong,.medical-v25-feature small{display:block}.medical-v25-feature small{margin-top:.28rem;opacity:.72}
 .medical-v25-overlay{position:fixed;inset:0;z-index:10000;background:var(--surface,#fff);overflow:auto}.medical-v25-panel{width:min(1160px,100%);min-height:100dvh;margin:0 auto;padding:clamp(1rem,3vw,2rem) clamp(1rem,4vw,2.5rem) max(2rem,env(safe-area-inset-bottom));color:var(--text,#20302d)}.medical-v25-panel--form{width:min(1040px,100%)}.medical-v25-header{display:flex;justify-content:space-between;gap:1rem;position:sticky;top:0;background:var(--surface,#fff);z-index:4;padding:.75rem 0;border-bottom:1px solid var(--border,rgba(58,87,82,.12))}.medical-v25-header h2{margin:.1rem 0 .25rem}.medical-v25-header p{margin:0;opacity:.7}.medical-v25-eyebrow{text-transform:uppercase;letter-spacing:.09em;font-size:.72rem;font-weight:800;color:#2f6f66!important;opacity:1!important}.medical-v25-close{border:0;background:transparent;font-size:2rem;color:inherit}.medical-v25-toolbar{display:flex;justify-content:flex-end;padding:1rem 0}.medical-v25-list{display:grid;gap:.75rem}.medical-v25-card{display:flex;justify-content:space-between;align-items:center;gap:1rem;padding:1rem;border:1px solid var(--border,rgba(58,87,82,.15));border-radius:16px}.medical-v25-card small{font-weight:700;color:#2f6f66}.medical-v25-card h3{margin:.25rem 0}.medical-v25-card p{margin:.2rem 0 .5rem}.medical-v25-card span{font-size:.76rem;font-weight:700;color:#2f6f66}.medical-v25-empty{text-align:center;padding:2rem;border:1px dashed var(--border,rgba(58,87,82,.25));border-radius:16px}
-.medical-v25-form{display:grid;gap:1rem;padding-top:1rem}.medical-v25-section{display:grid;gap:1rem;border:1px solid var(--border,rgba(58,87,82,.15));border-radius:18px;padding:1rem}.medical-v25-section-head h3{margin:0}.medical-v25-section-head p{margin:.2rem 0 0;opacity:.68}.medical-v25-form label{display:grid;gap:.38rem;font-weight:650;font-size:.88rem}.medical-v25-form input,.medical-v25-form textarea{width:100%;box-sizing:border-box;border:1px solid var(--border,rgba(58,87,82,.2));border-radius:12px;padding:.78rem .85rem;background:var(--surface,#fff);color:inherit;font:inherit}.medical-v25-required,.medical-v25-optional{font-size:.72rem;font-weight:600}.medical-v25-required{color:#2f6f66}.medical-v25-optional{opacity:.6}.medical-v25-grid{display:grid;gap:.75rem}.medical-v25-grid--2{grid-template-columns:repeat(2,minmax(0,1fr))}.medical-v25-grid--4{grid-template-columns:repeat(4,minmax(0,1fr))}
-.medical-v25-subsection{display:grid;gap:.75rem;padding:1rem;border-radius:16px;background:rgba(47,111,102,.045)}.medical-v25-subsection-head{display:flex;align-items:center;justify-content:space-between;gap:1rem}.medical-v25-subsection-head h4{margin:0}.medical-v25-subsection-head p{margin:.15rem 0 0;font-size:.85rem;opacity:.7}.medical-v25-item{display:grid;gap:.75rem;padding:1rem;border:1px solid var(--border,rgba(58,87,82,.15));border-radius:14px;background:var(--surface,#fff)}.medical-v25-item-head{display:flex;justify-content:space-between;align-items:center}.medical-v25-remove,.medical-v25-remove-photo{border:0;background:transparent;color:#9b2c2c;font-weight:700}.medical-v25-field-label{display:block;font-weight:650;font-size:.88rem;margin-bottom:.38rem}.medical-v25-dose-preview{padding:.75rem;border-radius:12px;background:#eef7f4;color:#285f56;font-size:.85rem;line-height:1.45}.medical-v25-photo-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:.6rem}.medical-v25-photo-slot{display:grid;gap:.45rem;padding:.7rem;border:1px dashed var(--border,rgba(58,87,82,.25));border-radius:12px}.medical-v25-photo-slot small{opacity:.6}.medical-v25-file{border:1px dashed var(--border,rgba(58,87,82,.25));border-radius:12px;padding:.8rem}.medical-v25-file small{font-weight:400;opacity:.65}.medical-v25-helper{margin:0;font-size:.8rem;opacity:.65}.medical-v25-legacy{padding:.75rem;border-radius:10px;background:#fff8df;font-size:.85rem}
+.medical-v25-form{display:grid;gap:1rem;padding-top:1rem}.medical-v25-section{display:grid;gap:1rem;border:1px solid var(--border,rgba(58,87,82,.15));border-radius:18px;padding:1rem}.medical-v25-section-head h3{margin:0}.medical-v25-section-head p{margin:.2rem 0 0;opacity:.68}.medical-v25-form label{display:grid;gap:.38rem;font-weight:650;font-size:.88rem}.medical-v25-form input,.medical-v25-form textarea,.medical-v25-form select{width:100%;box-sizing:border-box;border:1px solid var(--border,rgba(58,87,82,.2));border-radius:12px;padding:.78rem .85rem;background:var(--surface,#fff);color:inherit;font:inherit}.medical-v25-required,.medical-v25-optional{font-size:.72rem;font-weight:600}.medical-v25-required{color:#2f6f66}.medical-v25-optional{opacity:.6}.medical-v25-grid{display:grid;gap:.75rem}.medical-v25-grid--2{grid-template-columns:repeat(2,minmax(0,1fr))}.medical-v25-grid--4{grid-template-columns:repeat(4,minmax(0,1fr))}
+.medical-v25-subsection{display:grid;gap:.75rem;padding:1rem;border-radius:16px;background:rgba(47,111,102,.045)}.medical-v25-subsection-head{display:flex;align-items:center;justify-content:space-between;gap:1rem}.medical-v25-subsection-head h4{margin:0}.medical-v25-subsection-head p{margin:.15rem 0 0;font-size:.85rem;opacity:.7}.medical-v25-item{display:grid;gap:.75rem;padding:1rem;border:1px solid var(--border,rgba(58,87,82,.15));border-radius:14px;background:var(--surface,#fff)}.medical-v25-item-head{display:flex;justify-content:space-between;align-items:center}.medical-v25-remove,.medical-v25-remove-photo{border:0;background:transparent;color:#9b2c2c;font-weight:700}.medical-v25-field-label{display:block;font-weight:650;font-size:.88rem;margin-bottom:.38rem}.medical-v25-dose-preview{padding:.75rem;border-radius:12px;background:#eef7f4;color:#285f56;font-size:.85rem;line-height:1.45}.medical-v25-photo-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:.6rem}.medical-v25-photo-slot{display:grid;gap:.45rem;padding:.7rem;border:1px dashed var(--border,rgba(58,87,82,.25));border-radius:12px}.medical-v25-photo-slot small{opacity:.6}.medical-v25-file{border:1px dashed var(--border,rgba(58,87,82,.25));border-radius:12px;padding:.8rem}.medical-v25-file small{font-weight:400;opacity:.65}.medical-v25-existing-files{display:flex;flex-wrap:wrap;gap:.45rem}.medical-v25-exam-photos{display:grid;gap:.6rem}.medical-v25-helper{margin:0;font-size:.8rem;opacity:.65}.medical-v25-legacy{padding:.75rem;border-radius:10px;background:#fff8df;font-size:.85rem}
 .medical-v25-footer{display:flex;justify-content:flex-end;gap:.75rem;position:sticky;bottom:0;background:var(--surface,#fff);padding:1rem 0 calc(1rem + env(safe-area-inset-bottom));border-top:1px solid var(--border,rgba(58,87,82,.12))}.medical-v25-toast-region{position:fixed;z-index:12000;top:calc(.8rem + env(safe-area-inset-top));left:50%;transform:translateX(-50%);width:min(92vw,560px);display:grid;gap:.5rem}.medical-v25-toast{background:#225d54;color:#fff;padding:.9rem 1rem;border-radius:12px;font-weight:700;box-shadow:0 12px 32px rgba(0,0,0,.25)}.medical-v25-toast--error{background:#8b2f2f}
 @media(max-width:700px){.medical-v25-panel{padding-top:max(1rem,env(safe-area-inset-top))}.medical-v25-grid--2,.medical-v25-grid--4,.medical-v25-photo-grid{grid-template-columns:1fr}.medical-v25-card{align-items:flex-start}.medical-v25-subsection-head{align-items:flex-start;flex-direction:column}.medical-v25-subsection-head .button{width:100%}.medical-v25-footer .button{flex:1}}
 `;document.head.append(s);
