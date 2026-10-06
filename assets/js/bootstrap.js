@@ -14,10 +14,13 @@ async function start() {
     await import('./app.js?v=19');
   } else if (mode === 'stable') {
     await import('./next/app-stable-v1.js?v=1');
+    await import('./next/input-formatters.js?v=1');
     await import('./next/pwa-install-v24.js?v=24');
   } else {
     await import('./next/app-next.js?v=20');
-    await import('./next/medical-appointments-v23.js?v=24');
+    await import('./next/input-formatters.js?v=1');
+    await import('./next/medication-reminders.js?v=1');
+    await import('./next/medical-appointments-v24.js?v=1');
     await import('./next/pwa-install-v24.js?v=24');
   }
 
