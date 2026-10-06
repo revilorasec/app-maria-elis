@@ -2,6 +2,11 @@ const isoDay = (value) => new Date(value).toISOString().slice(0,10);
 const at = (day,time) => new Date(day+'T'+time+':00').toISOString();
 export function buildMedicationTasks(medication, schedules, from, to) {
   if (!medication?.active || !medication?.id) return [];
+  const usageInstructions=[
+    medication.dose ? 'Dose: '+medication.dose : '',
+    medication.route ? 'Via: '+medication.route : '',
+    medication.guidance||medication.instructions||''
+  ].filter(Boolean).join(' · ');
   const start=new Date(Math.max(new Date(medication.starts_on||medication.startsOn||from),new Date(from)));
   const end=new Date(Math.min(new Date(medication.ends_on||medication.endsOn||to),new Date(to)));
   const allowed=Array.isArray(medication.weekdays)&&medication.weekdays.length?new Set(medication.weekdays.map(Number)):null;
@@ -9,7 +14,7 @@ export function buildMedicationTasks(medication, schedules, from, to) {
   for(let cursor=new Date(start);cursor<=end;cursor.setDate(cursor.getDate()+1)){
     if(allowed&&!allowed.has(cursor.getDay()))continue;
     for(const schedule of schedules.filter(item=>item.active!==false)){
-      rows.push({family_id:medication.family_id,medication_id:medication.id,schedule_id:schedule.id,due_at:at(isoDay(cursor),String(schedule.time_of_day||schedule.timeOfDay).slice(0,5)),title:'Administrar '+medication.name,task_kind:'medication',assigned_role:'caregiver',instructions:medication.guidance||medication.instructions||'',status:'pending'});
+      rows.push({family_id:medication.family_id,medication_id:medication.id,schedule_id:schedule.id,due_at:at(isoDay(cursor),String(schedule.time_of_day||schedule.timeOfDay).slice(0,5)),title:'Administrar '+medication.name,task_kind:'medication',assigned_role:'caregiver',instructions:usageInstructions,status:'pending'});
     }
   }
   return rows;
