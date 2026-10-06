@@ -9,6 +9,9 @@ let saving = false;
 let nextMedicationIndex = 0;
 let nextExamIndex = 0;
 let medicationCatalog = [];
+let healthProfessionalCatalog = [];
+let careLocationCatalog = [];
+let professionalLocationLinks = [];
 
 const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const attr = esc;
@@ -96,6 +99,58 @@ async function loadMedicationCatalog() {
   if (result.error) throw result.error;
   medicationCatalog = result.data || [];
   return medicationCatalog;
+}
+
+async function loadMedicalDirectory() {
+  const ctx = await getContext();
+  const [professionals, locations, links] = await Promise.all([
+    supabase.from('contacts').select('*').eq('family_id',ctx.family_id).eq('contact_type','health_professional').eq('active',true).order('full_name'),
+    supabase.from('care_locations').select('*').eq('family_id',ctx.family_id).eq('active',true).order('name'),
+    supabase.from('contact_care_locations').select('contact_id,location_id'),
+  ]);
+  if (professionals.error || locations.error || links.error) throw professionals.error || locations.error || links.error;
+  healthProfessionalCatalog = professionals.data || [];
+  careLocationCatalog = locations.data || [];
+  professionalLocationLinks = links.data || [];
+}
+function mapLink(address) {
+  return String(address||'').trim() ? 'https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(String(address).trim()) : '';
+}
+function professionalOptions(row) {
+  const current = row?.professional_contact_id || '';
+  const options = healthProfessionalCatalog.map((item)=>`<option value="${attr(item.id)}" ${current===item.id?'selected':''}>${esc(item.full_name)}</option>`).join('');
+  const legacy = !current && row?.doctor_name ? `<option value="legacy" selected>${esc(row.doctor_name)} (registro antigo)</option>` : '';
+  return '<option value="">Selecione...</option>'+legacy+options;
+}
+function specialtiesForProfessional(professionalId) {
+  const professional = healthProfessionalCatalog.find((item)=>item.id===professionalId);
+  const source = professional?.specialties?.length
+    ? professional.specialties
+    : [...new Set(healthProfessionalCatalog.flatMap((item)=>item.specialties||[]))];
+  return source;
+}
+function specialtyOptions(row, professionalId='') {
+  const values = new Set(specialtiesForProfessional(professionalId));
+  if (row?.specialty) values.add(row.specialty);
+  return [...values].sort((a,b)=>a.localeCompare(b,'pt-BR')).map((value)=>`<option value="${attr(value)}" ${row?.specialty===value?'selected':''}>${esc(value)}</option>`).join('');
+}
+function locationsForProfessional(professionalId) {
+  if (!professionalId) return careLocationCatalog;
+  const ids = new Set(professionalLocationLinks.filter((link)=>link.contact_id===professionalId).map((link)=>link.location_id));
+  const filtered = careLocationCatalog.filter((item)=>ids.has(item.id));
+  return filtered.length ? filtered : careLocationCatalog;
+}
+function careLocationOptions(row, professionalId='') {
+  const current = row?.care_location_id || '';
+  const options = locationsForProfessional(professionalId).map((item)=>`<option value="${attr(item.id)}" ${current===item.id?'selected':''}>${esc(item.name)}</option>`).join('');
+  const legacy = !current && row?.clinic_or_hospital ? `<option value="legacy" selected>${esc(row.clinic_or_hospital)} (registro antigo)</option>` : '';
+  return '<option value="">Selecione...</option>'+legacy+options;
+}
+function locationDetailHtml(locationId) {
+  const location = careLocationCatalog.find((item)=>item.id===locationId);
+  if (!location) return '';
+  const url = mapLink(location.address);
+  return `<div class="medical-v25-location-detail"><strong>${esc(location.name)}</strong>${location.address?`<span>${esc(location.address)}</span>`:''}${url?`<a class="button button--secondary button--small" href="${attr(url)}" target="_blank" rel="noopener">Ver no Google Maps</a>`:''}</div>`;
 }
 
 function closeOverlay() {
@@ -258,12 +313,13 @@ function formMarkup(row, care) {
     ${section('1. Consulta','Informações do agendamento. Se houver data e horário, a consulta também entra na Agenda do dia.',`
       <div class="medical-v25-grid medical-v25-grid--2">
         <label>Data e horário <span class="medical-v25-optional">opcional</span><input name="appointment_at" type="datetime-local" value="${attr(row?.appointment_at ? localDateTimeValue(row.appointment_at) : '')}"></label>
-        <label>Especialidade <span class="medical-v25-required">obrigatório</span><input name="specialty" required value="${attr(row?.specialty||'')}" placeholder="Ex.: Pediatria"></label>
+        <label>Médico(a) / profissional<select name="professional_contact_id" data-professional-select>${professionalOptions(row)}</select><input type="hidden" name="doctor_name" data-doctor-name value="${attr(row?.doctor_name||'')}"></label>
       </div>
       <div class="medical-v25-grid medical-v25-grid--2">
-        <label>Médico(a) / profissional<input name="doctor_name" value="${attr(row?.doctor_name||'')}"></label>
-        <label>Clínica / hospital<input name="clinic_or_hospital" value="${attr(row?.clinic_or_hospital||'')}"></label>
+        <label>Especialidade <span class="medical-v25-required">obrigatório</span><select name="specialty" data-specialty-select required><option value="">Selecione...</option>${specialtyOptions(row,row?.professional_contact_id||'')}</select></label>
+        <label>Clínica / hospital<select name="care_location_id" data-location-select>${careLocationOptions(row,row?.professional_contact_id||'')}</select><input type="hidden" name="clinic_or_hospital" data-location-name value="${attr(row?.clinic_or_hospital||'')}"></label>
       </div>
+      <div data-location-detail>${locationDetailHtml(row?.care_location_id||'')}</div>
       <label>Motivo da consulta<textarea name="reason" rows="2">${esc(row?.reason||'')}</textarea></label>`)}
 
     ${section('2. Durante a consulta','As medidas são formatadas automaticamente.',`
@@ -306,7 +362,7 @@ async function openEditor(id='') {
   const row = id ? appointments.find(x=>x.id===id) : null;
   if (id && !row) return toast('Consulta não encontrada.',true);
   try {
-    const [care] = await Promise.all([loadCareItems(id), loadMedicationCatalog()]);
+    const [care] = await Promise.all([loadCareItems(id), loadMedicationCatalog(), loadMedicalDirectory()]);
     closeOverlay();
     overlay = document.createElement('div');
     overlay.className = 'medical-v25-overlay';
@@ -601,7 +657,7 @@ async function syncAppointmentEvents(appointment, rawAppointmentAt, rawReturnAt,
     appointment,ctx,relatedType:'medical_appointment',
     date:rawAppointmentAt ? appointment.appointment_at : '',
     title:'Consulta: '+title,
-    location:appointment.clinic_or_hospital,
+    location:(()=>{const l=careLocationCatalog.find(x=>x.id===appointment.care_location_id);return l ? [l.name,l.address].filter(Boolean).join(' · ') : appointment.clinic_or_hospital;})(),
     notes:appointment.reason || 'Consulta médica.',
     eventType:'appointment',
   });
@@ -609,7 +665,7 @@ async function syncAppointmentEvents(appointment, rawAppointmentAt, rawReturnAt,
     appointment,ctx,relatedType:'medical_appointment_return',
     date:rawReturnAt ? appointment.return_at : '',
     title:'Retorno: '+title,
-    location:appointment.clinic_or_hospital,
+    location:(()=>{const l=careLocationCatalog.find(x=>x.id===appointment.care_location_id);return l ? [l.name,l.address].filter(Boolean).join(' · ') : appointment.clinic_or_hospital;})(),
     notes:'Retorno da consulta'+(appointment.recommendations ? ' · '+appointment.recommendations : ''),
     eventType:'return',
   });
@@ -638,6 +694,8 @@ async function save(form) {
     const payload = {
       id: String(f.get('id')||'').trim() || null,
       family_id: ctx.family_id,
+      professional_contact_id: ['','legacy'].includes(String(f.get('professional_contact_id')||'')) ? null : String(f.get('professional_contact_id')),
+      care_location_id: ['','legacy'].includes(String(f.get('care_location_id')||'')) ? null : String(f.get('care_location_id')),
       doctor_name: String(f.get('doctor_name')||'').trim(),
       specialty,
       clinic_or_hospital: String(f.get('clinic_or_hospital')||'').trim(),
@@ -720,6 +778,44 @@ document.addEventListener('input',(e)=>{
   if (item && (e.target.matches('[data-med-first]') || e.target.matches('[data-med-interval]') || e.target.matches('[data-med-days]'))) updateMedicationPreview(item);
 },true);
 document.addEventListener('change',(e)=>{
+  const professionalSelect = e.target.closest?.('[data-professional-select]');
+  if (professionalSelect) {
+    const professional = healthProfessionalCatalog.find((item)=>item.id===professionalSelect.value);
+    const doctorHidden = overlay?.querySelector('[data-doctor-name]');
+    if (doctorHidden && professional) doctorHidden.value = professional.full_name;
+    if (doctorHidden && professionalSelect.value==='') doctorHidden.value = '';
+    const specialtySelect = overlay?.querySelector('[data-specialty-select]');
+    if (specialtySelect) {
+      const current = specialtySelect.value;
+      const values = specialtiesForProfessional(professionalSelect.value);
+      specialtySelect.innerHTML = '<option value="">Selecione...</option>'+values.map((value)=>`<option value="${attr(value)}">${esc(value)}</option>`).join('');
+      if (values.includes(current)) specialtySelect.value=current;
+      else if (values.length===1) specialtySelect.value=values[0];
+    }
+    const locationSelect = overlay?.querySelector('[data-location-select]');
+    if (locationSelect) {
+      const options = locationsForProfessional(professionalSelect.value);
+      locationSelect.innerHTML = '<option value="">Selecione...</option>'+options.map((item)=>`<option value="${attr(item.id)}">${esc(item.name)}</option>`).join('');
+      if (options.length===1) {
+        locationSelect.value=options[0].id;
+        const hidden=overlay?.querySelector('[data-location-name]'); if(hidden) hidden.value=options[0].name;
+        const detail=overlay?.querySelector('[data-location-detail]'); if(detail) detail.innerHTML=locationDetailHtml(options[0].id);
+      } else {
+        const hidden=overlay?.querySelector('[data-location-name]'); if(hidden) hidden.value='';
+        const detail=overlay?.querySelector('[data-location-detail]'); if(detail) detail.innerHTML='';
+      }
+    }
+    return;
+  }
+  const careLocationSelect = e.target.closest?.('[data-location-select]');
+  if (careLocationSelect) {
+    const location = careLocationCatalog.find((item)=>item.id===careLocationSelect.value);
+    const hidden = overlay?.querySelector('[data-location-name]');
+    if (hidden) hidden.value = location?.name || (careLocationSelect.value==='legacy' ? hidden.value : '');
+    const detail = overlay?.querySelector('[data-location-detail]');
+    if (detail) detail.innerHTML = locationDetailHtml(careLocationSelect.value);
+    return;
+  }
   const catalogSelect = e.target.closest?.('[data-med-catalog]');
   if (catalogSelect) {
     const node = catalogSelect.closest('[data-med-item]');

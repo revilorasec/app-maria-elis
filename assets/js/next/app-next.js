@@ -626,26 +626,197 @@ function hospitalModal() {
   return `<div class="modal-backdrop"><section class="modal" role="dialog" aria-modal="true" data-modal-panel><button type="button" class="modal__close" data-action="close-modal" aria-label="Fechar">×</button><h2>Cadastrar hospital</h2><form id="hospital-form"><label>Nome<input name="name" required></label><label>Telefone<input name="phone" inputmode="tel"></label><label>Endereço<input name="address"></label><label>Observações<textarea name="notes" placeholder="Ex.: pronto-socorro infantil 24 horas"></textarea></label><label>Prioridade<input name="priority" type="number" min="1" max="20" value="1"></label><div class="next-form-actions"><button type="button" class="button button--secondary" data-action="close-modal">Cancelar</button><button class="button">Salvar hospital</button></div></form></section></div>`;
 }
 
+const contactTypeLabels = {
+  father:'Pai', mother:'Mãe', family:'Familiar', caregiver:'Babá', teacher:'Professor(a)',
+  friend:'Amigo(a)', health_professional:'Médico(a) / profissional', other:'Outro',
+};
+const contactRoleForType = (type) => ({
+  father:'father', mother:'mother', family:'grandparent', caregiver:'caregiver',
+  teacher:'custom', friend:'friend', health_professional:'doctor', other:'custom',
+})[type] || 'custom';
+const accessRoleLabels = {
+  father:'Pai — acesso total', mother:'Mãe — acesso total', grandparent:'Familiar',
+  caregiver:'Babá', doctor:'Médico(a)', friend:'Amigo(a)', custom:'Personalizado / Professor(a)',
+};
+const contactResourceLabels = {
+  child:'Dados da Maria', contacts:'Pessoas e contatos', daily_logs:'Registros do dia',
+  events:'Agenda do dia', files:'Documentos', health:'Saúde e consultas',
+  medications:'Medicamentos', photos:'Fotos', recipes:'Receitas culinárias', tasks:'Tarefas',
+};
+const googleMapsUrl = (address) => String(address || '').trim()
+  ? 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(String(address).trim())
+  : '';
+
+async function contactEditorData(record = {}) {
+  const familyId = state.context.membership.family_id;
+  const [locationsResult, linksResult, definitionsResult, defaultResult, familyResult] = await Promise.all([
+    supabase.from('care_locations').select('*').eq('family_id',familyId).eq('active',true).order('name'),
+    record.id ? supabase.from('contact_care_locations').select('location_id').eq('contact_id',record.id) : Promise.resolve({data:[],error:null}),
+    supabase.from('permission_definitions').select('code,resource,action,description').order('resource').order('action'),
+    supabase.from('role_permissions').select('role,permission_code,allowed'),
+    supabase.from('family_role_permissions').select('role,permission_code,allowed').eq('family_id',familyId),
+  ]);
+  const err = locationsResult.error || linksResult.error || definitionsResult.error || defaultResult.error || familyResult.error;
+  if (err) throw err;
+  let listedUsers = [];
+  if (isAdmin()) {
+    try { listedUsers = (await listUsers()).users || []; } catch {}
+  }
+  let linkedUser = null;
+  if (record.membership_id) linkedUser = listedUsers.find((item)=>item.membership_id===record.membership_id) || null;
+  if (!linkedUser && record.email) linkedUser = listedUsers.find((item)=>String(item.email||'').toLowerCase()===String(record.email).toLowerCase()) || null;
+  const role = linkedUser?.role || contactRoleForType(record.contact_type || 'other');
+  const defaultsByRole = {};
+  for (const row of defaultResult.data || []) {
+    defaultsByRole[row.role] ||= {};
+    defaultsByRole[row.role][row.permission_code] = Boolean(row.allowed);
+  }
+  for (const row of familyResult.data || []) {
+    defaultsByRole[row.role] ||= {};
+    defaultsByRole[row.role][row.permission_code] = Boolean(row.allowed);
+  }
+  const effective = {...(defaultsByRole[role] || {})};
+  if (record.membership_id) {
+    const overrides = await supabase.from('membership_permissions').select('permission_code,allowed').eq('membership_id',record.membership_id);
+    if (overrides.error) throw overrides.error;
+    for (const row of overrides.data || []) effective[row.permission_code] = Boolean(row.allowed);
+  }
+  return {
+    ...record,
+    careLocations: locationsResult.data || [],
+    selectedLocationIds: (linksResult.data || []).map((row)=>row.location_id),
+    permissionDefinitions: definitionsResult.data || [],
+    permissionDefaultsByRole: defaultsByRole,
+    effectivePermissions: effective,
+    linkedUser,
+    accessRole: role,
+  };
+}
+function renderContactPermissions(data) {
+  if (!isAdmin()) return '';
+  const role = data.accessRole || contactRoleForType(data.contact_type || 'other');
+  if (['father','mother'].includes(role)) return '<p class="permission-note"><strong>Pai e Mãe têm acesso total.</strong></p>';
+  const groups = new Map();
+  for (const def of data.permissionDefinitions || []) {
+    if (def.code === 'users.manage') continue;
+    if (!groups.has(def.resource)) groups.set(def.resource,[]);
+    groups.get(def.resource).push(def);
+  }
+  return [...groups.entries()].map(([resource,defs])=>`<fieldset class="permission-module contact-permission-module"><h3>${esc(contactResourceLabels[resource] || resource)}</h3>${defs.map((def)=>`<label class="permission-toggle"><input type="checkbox" name="contact_permission" value="${attr(def.code)}" ${data.effectivePermissions?.[def.code] ? 'checked' : ''}><span>${esc(def.description)}</span></label>`).join('')}</fieldset>`).join('');
+}
+function contactLocationChecks(data) {
+  const selected = new Set(data.selectedLocationIds || []);
+  if (!(data.careLocations || []).length) return '<p class="permission-note">Cadastre primeiro uma clínica ou hospital abaixo.</p>';
+  return (data.careLocations || []).map((location)=>`<label class="permission-toggle"><input type="checkbox" name="care_location_id" value="${attr(location.id)}" ${selected.has(location.id)?'checked':''}><span><strong>${esc(location.name)}</strong><small>${esc(location.address || '')}</small></span></label>`).join('');
+}
 async function contactsPage() {
   if (!can('contacts.view')) return denyPage();
-  const result = await supabase.from('contacts').select('*').eq('family_id', state.context.membership.family_id).order('emergency_order', { ascending: true, nullsFirst: false }).order('full_name');
-  if (result.error) throw result.error;
-  const rows = result.data || [];
+  const familyId = state.context.membership.family_id;
+  const [peopleResult, locationResult] = await Promise.all([
+    supabase.from('contacts').select('*').eq('family_id',familyId).order('emergency_order',{ascending:true,nullsFirst:false}).order('full_name'),
+    supabase.from('care_locations').select('*').eq('family_id',familyId).eq('active',true).order('name'),
+  ]);
+  if (peopleResult.error || locationResult.error) throw peopleResult.error || locationResult.error;
+  const rows = peopleResult.data || [];
+  const locations = locationResult.data || [];
   const canEditContacts = canManage('contacts.edit');
-  const action = canManage('contacts.create') ? '<button class="button button--small" data-action="new-contact">Registrar</button>' : '';
-  const list = rows.length ? rows.map((row) => {
+  const actions = canManage('contacts.create')
+    ? '<div class="heading-actions"><button class="button button--secondary button--small" data-action="new-care-location">Clínica / hospital</button><button class="button button--small" data-action="new-contact">Pessoa</button></div>'
+    : '';
+  const peopleList = rows.length ? rows.map((row)=>{
     const phone = row.phone_normalized || row.whatsapp_normalized || '';
+    const type = contactTypeLabels[row.contact_type] || row.relationship_type || 'Contato';
+    const details = [type, row.contact_type==='family' ? row.kinship_degree : '', row.specialties?.length ? row.specialties.join(', ') : '', phone ? formatPhone(phone) : ''].filter(Boolean).join(' · ');
+    const badges = [row.is_emergency ? '<span class="status-pill status-pill--danger">Emergência</span>' : '', row.app_access_enabled ? '<span class="status-pill status-pill--success">Acesso ao app</span>' : ''].filter(Boolean).join(' ');
     const main = canEditContacts
-      ? `<button class="person-card__main" data-contact-edit="${attr(row.id)}"><span class="person-avatar">${initials(row.full_name)}</span><span><strong>${esc(row.full_name)}</strong><small>${esc(row.relationship_type || 'Contato')}${phone ? ` · ${esc(formatPhone(phone))}` : ''}</small></span><b>›</b></button>`
-      : `<div class="person-card__main person-card__main--readonly"><span class="person-avatar">${initials(row.full_name)}</span><span><strong>${esc(row.full_name)}</strong><small>${esc(row.relationship_type || 'Contato')}${phone ? ` · ${esc(formatPhone(phone))}` : ''}</small></span></div>`;
-    return `<article class="person-card${row.active === false ? ' person-card--inactive' : ''}">${main}<div class="person-card__quick">${row.phone_normalized ? `<a href="tel:${attr(row.phone_normalized)}" aria-label="Ligar para ${attr(row.full_name)}">${icon('phone')}</a>` : ''}${row.whatsapp_normalized ? `<a href="https://wa.me/55${attr(row.whatsapp_normalized)}" target="_blank" rel="noopener" aria-label="WhatsApp de ${attr(row.full_name)}">${icon('whatsapp')}</a>` : ''}</div></article>`;
-  }).join('') : emptyState('Nenhum contato', canManage('contacts.create') ? 'Cadastre familiares, médicos e pessoas de confiança.' : 'Nenhum contato foi cadastrado.', action);
-  return `${pageHeading('Contatos', 'Familiares, responsáveis, médicos e emergências.', action)}<section class="record-list next-record-list">${list}</section>`;
+      ? `<button class="person-card__main" data-contact-edit="${attr(row.id)}"><span class="person-avatar">${initials(row.full_name)}</span><span><strong>${esc(row.full_name)}</strong><small>${esc(details)}</small>${badges}</span><b>›</b></button>`
+      : `<div class="person-card__main person-card__main--readonly"><span class="person-avatar">${initials(row.full_name)}</span><span><strong>${esc(row.full_name)}</strong><small>${esc(details)}</small>${badges}</span></div>`;
+    const address = addressText(row.address);
+    return `<article class="person-card${row.active===false?' person-card--inactive':''}">${main}<div class="person-card__quick">${row.phone_normalized?`<a href="tel:${attr(row.phone_normalized)}">${icon('phone')}</a>`:''}${row.whatsapp_normalized?`<a href="https://wa.me/55${attr(row.whatsapp_normalized)}" target="_blank" rel="noopener">${icon('whatsapp')}</a>`:''}${address?`<a href="${attr(googleMapsUrl(address))}" target="_blank" rel="noopener" title="Abrir no mapa">${icon('hospital')}</a>`:''}</div></article>`;
+  }).join('') : emptyState('Nenhuma pessoa cadastrada','Cadastre familiares, babá, professores, amigos e profissionais de saúde.');
+  const locationList = locations.length ? locations.map((row)=>`<article class="hospital-card"><div><strong>${esc(row.name)}</strong><p>${esc(row.address||'')}</p><small>${esc(({clinic:'Clínica',hospital:'Hospital',office:'Consultório',laboratory:'Laboratório',other:'Outro'})[row.location_type]||'Local')}</small></div><div>${row.phone_normalized?`<a class="button button--secondary button--small" href="tel:${attr(row.phone_normalized)}">Ligar</a>`:''}${row.address?`<a class="button button--small" href="${attr(googleMapsUrl(row.address))}" target="_blank" rel="noopener">Google Maps</a>`:''}${canEditContacts?`<button type="button" class="button button--secondary button--small" data-care-location-edit="${attr(row.id)}">Editar</button>`:''}</div></article>`).join('') : emptyState('Nenhuma clínica ou hospital','Cadastre locais de atendimento para usá-los nas consultas.');
+  return `${pageHeading('Pessoas e contatos','Família, cuidadores, professores, amigos, profissionais de saúde e locais de atendimento.',actions)}
+    <section class="section-block"><div class="section-title"><h2>Pessoas</h2><span class="status-pill status-pill--soft">${rows.length}</span></div><div class="record-list next-record-list">${peopleList}</div></section>
+    <section class="section-block"><div class="section-title"><h2>Clínicas e hospitais</h2><span class="status-pill status-pill--soft">${locations.length}</span></div><div class="record-list">${locationList}</div></section>`;
 }
-
 function contactModal(data = {}) {
   const editing = Boolean(data.id);
-  return `<div class="modal-backdrop"><section class="modal" role="dialog" aria-modal="true" aria-labelledby="contact-title" data-modal-panel><button type="button" class="modal__close" data-action="close-modal" aria-label="Fechar">×</button><h2 id="contact-title">${editing ? 'Editar contato' : 'Novo contato'}</h2><form id="contact-form"><input type="hidden" name="id" value="${attr(data.id || '')}"><div class="form-grid"><label>Nome completo<input name="full_name" value="${attr(data.full_name || '')}" required autocomplete="name"></label><label>Vínculo<input name="relationship_type" value="${attr(data.relationship_type || '')}" placeholder="Ex.: Avó, pediatra"></label></div><div class="form-grid"><label>Telefone<input name="phone_normalized" inputmode="tel" value="${attr(formatPhone(data.phone_normalized))}" placeholder="(11) 99999-9999"></label><label>WhatsApp<input name="whatsapp_normalized" inputmode="tel" value="${attr(formatPhone(data.whatsapp_normalized))}" placeholder="(11) 99999-9999"></label></div><label>E-mail<input name="email" type="email" value="${attr(data.email || '')}"></label><div class="form-grid"><label>Prioridade de emergência<input name="emergency_order" type="number" min="1" max="99" value="${attr(data.emergency_order || '')}"></label><label>Status<select name="active"><option value="true"${data.active !== false ? ' selected' : ''}>Ativo</option><option value="false"${data.active === false ? ' selected' : ''}>Inativo</option></select></label></div><div class="profile-photo-row"><div class="person-avatar person-avatar--large" id="contact-photo-placeholder">${initials(data.full_name)}</div><div><strong>Foto do contato</strong><p>A foto será recortada no aparelho antes do envio.</p><input id="contact-photo" name="photo" type="file" accept="image/*"></div></div><label>Zoom da foto<input id="contact-zoom" type="range" min="1" max="3" step=".1" value="1"></label><img id="contact-photo-preview" class="next-photo-preview" alt="Prévia da foto" hidden><div class="next-form-actions"><button type="button" class="button button--secondary" data-action="close-modal">Cancelar</button><button class="button">${editing ? 'Salvar alterações' : 'Cadastrar contato'}</button></div></form></section></div>`;
+  const type = data.contact_type || 'other';
+  const role = data.accessRole || contactRoleForType(type);
+  const accessEnabled = Boolean(data.app_access_enabled || data.linkedUser);
+  const locationChecks = contactLocationChecks(data);
+  return `<div class="modal-backdrop"><section class="modal modal--wide" role="dialog" aria-modal="true" data-modal-panel>
+    <button type="button" class="modal__close" data-action="close-modal">×</button>
+    <h2>${editing?'Editar pessoa':'Nova pessoa'}</h2>
+    <form id="contact-form">
+      <input type="hidden" name="id" value="${attr(data.id||'')}">
+      <input type="hidden" name="membership_id" value="${attr(data.membership_id||data.linkedUser?.membership_id||'')}">
+      <input type="hidden" name="linked_user_id" value="${attr(data.linkedUser?.user_id||data.linkedUser?.id||'')}">
+      <div class="form-grid"><label>Nome completo<input name="full_name" value="${attr(data.full_name||'')}" required autocomplete="name"></label><label>Tipo<select name="contact_type" id="contact-type">${Object.entries(contactTypeLabels).map(([value,label])=>`<option value="${value}" ${type===value?'selected':''}>${esc(label)}</option>`).join('')}</select></label></div>
+      <div class="form-grid"><label>Grau de parentesco<input name="kinship_degree" value="${attr(data.kinship_degree||'')}" placeholder="Ex.: avó materna, tio"></label><label>Vínculo / descrição<input name="relationship_type" value="${attr(data.relationship_type||'')}" placeholder="Ex.: professora da escola"></label></div>
+      <section id="contact-health-fields" class="settings-card" ${type==='health_professional'?'':'hidden'}>
+        <div class="section-title"><h3>Dados profissionais</h3></div>
+        <div class="form-grid"><label>Especialidades<input name="specialties" value="${attr((data.specialties||[]).join(', '))}" placeholder="Ex.: Pediatria, Alergologia"></label><label>Registro profissional<input name="professional_registration" value="${attr(data.professional_registration||'')}" placeholder="Ex.: CRM 123456"></label></div>
+        <div><strong>Clínicas / hospitais onde atende</strong><div class="permission-modules contact-location-checks">${locationChecks}</div></div>
+      </section>
+      <div class="form-grid"><label>Telefone<input name="phone_normalized" inputmode="tel" value="${attr(formatPhone(data.phone_normalized||''))}" placeholder="(11) 99999-9999"></label><label>WhatsApp<input name="whatsapp_normalized" inputmode="tel" value="${attr(formatPhone(data.whatsapp_normalized||''))}"></label></div>
+      <label>E-mail<input name="email" type="email" value="${attr(data.email||data.linkedUser?.email||'')}"></label>
+      <label>Endereço<input name="address" value="${attr(addressText(data.address))}" autocomplete="street-address"></label>
+      <label class="check-row"><input name="is_emergency" type="checkbox" ${data.is_emergency?'checked':''}> É contato de emergência</label>
+      <div class="form-grid"><label>Ordem na emergência<input name="emergency_order" type="number" min="1" max="99" value="${attr(data.emergency_order||'')}"></label><label>Status<select name="active"><option value="true" ${data.active!==false?'selected':''}>Ativo</option><option value="false" ${data.active===false?'selected':''}>Inativo</option></select></label></div>
+      ${isAdmin()?`<section class="settings-card"><div class="section-title"><h3>Acesso ao APP MARIA</h3></div>
+        <label class="check-row"><input id="contact-app-access" name="app_access_enabled" type="checkbox" ${accessEnabled?'checked':''}> Esta pessoa pode entrar no app</label>
+        <div id="contact-access-fields" ${accessEnabled?'':'hidden'}>
+          <div class="form-grid"><label>Categoria de acesso<select id="contact-access-role" name="access_role">${Object.entries(accessRoleLabels).map(([value,label])=>`<option value="${value}" ${role===value?'selected':''}>${esc(label)}</option>`).join('')}</select></label><label>${data.linkedUser?'Novo PIN temporário (opcional)':'PIN temporário'}<input name="access_pin" inputmode="numeric" pattern="[0-9]{6,12}" minlength="6" maxlength="12"></label></div>
+          <p class="permission-note">O e-mail acima identifica o usuário. Marque abaixo exatamente o que esta pessoa pode ver ou alterar.</p>
+          <div id="contact-permission-list" class="permission-modules">${renderContactPermissions(data)}</div>
+        </div>
+      </section>`:''}
+      <label>Observações<textarea name="notes">${esc(data.notes||'')}</textarea></label>
+      <div class="profile-photo-row"><div class="person-avatar person-avatar--large">${initials(data.full_name)}</div><div><strong>Foto</strong><input id="contact-photo" type="file" accept="image/*"></div></div>
+      <label>Zoom da foto<input id="contact-zoom" type="range" min="1" max="3" step=".1" value="1"></label>
+      <img id="contact-photo-preview" class="next-photo-preview" alt="Prévia" hidden>
+      <div class="next-form-actions"><button type="button" class="button button--secondary" data-action="close-modal">Cancelar</button><button class="button">Salvar pessoa</button></div>
+    </form>
+  </section></div>`;
+}
+function careLocationModal(data = {}) {
+  const editing = Boolean(data.id);
+  const map = googleMapsUrl(data.address);
+  return `<div class="modal-backdrop"><section class="modal modal--wide" role="dialog" aria-modal="true" data-modal-panel>
+    <button type="button" class="modal__close" data-action="close-modal">×</button><h2>${editing?'Editar clínica / hospital':'Nova clínica / hospital'}</h2>
+    <form id="care-location-form"><input type="hidden" name="id" value="${attr(data.id||'')}">
+      <div class="form-grid"><label>Nome<input name="name" required value="${attr(data.name||'')}"></label><label>Tipo<select name="location_type"><option value="clinic" ${data.location_type==='clinic'?'selected':''}>Clínica</option><option value="hospital" ${data.location_type==='hospital'?'selected':''}>Hospital</option><option value="office" ${data.location_type==='office'?'selected':''}>Consultório</option><option value="laboratory" ${data.location_type==='laboratory'?'selected':''}>Laboratório</option><option value="other" ${data.location_type==='other'?'selected':''}>Outro</option></select></label></div>
+      <label>Endereço<input id="care-location-address" name="address" value="${attr(data.address||'')}" placeholder="Rua, número, bairro, cidade - UF"></label>
+      <div id="care-location-map-link">${map?`<a class="button button--secondary button--small" href="${attr(map)}" target="_blank" rel="noopener">Ver no Google Maps</a>`:''}</div>
+      <div class="form-grid"><label>Telefone<input name="phone_normalized" inputmode="tel" value="${attr(formatPhone(data.phone_normalized||''))}"></label><label>Status<select name="active"><option value="true" ${data.active!==false?'selected':''}>Ativo</option><option value="false" ${data.active===false?'selected':''}>Inativo</option></select></label></div>
+      <label>Observações<textarea name="notes">${esc(data.notes||'')}</textarea></label>
+      <div class="next-form-actions"><button type="button" class="button button--secondary" data-action="close-modal">Cancelar</button><button class="button">Salvar local</button></div>
+    </form>
+  </section></div>`;
+}
+async function applyContactPermissionDefaults(role) {
+  const data = state.modal?.data;
+  if (!data) return;
+  const defaults = data.permissionDefaultsByRole?.[role] || {};
+  document.querySelectorAll('input[name="contact_permission"]').forEach((input)=>{ input.checked = Boolean(defaults[input.value]); });
+  const list = document.querySelector('#contact-permission-list');
+  if (list) list.hidden = ['father','mother'].includes(role);
+}
+function updateContactConditionalFields({applyDefaults=false}={}) {
+  const type = document.querySelector('#contact-type')?.value || 'other';
+  const health = document.querySelector('#contact-health-fields');
+  if (health) health.hidden = type !== 'health_professional';
+  const access = document.querySelector('#contact-app-access');
+  const fields = document.querySelector('#contact-access-fields');
+  if (fields) fields.hidden = !access?.checked;
+  const roleSelect = document.querySelector('#contact-access-role');
+  if (applyDefaults && roleSelect && !state.modal?.data?.linkedUser) {
+    roleSelect.value = contactRoleForType(type);
+    applyContactPermissionDefaults(roleSelect.value);
+  }
+  const permissionList = document.querySelector('#contact-permission-list');
+  if (permissionList && roleSelect) permissionList.hidden = ['father','mother'].includes(roleSelect.value);
 }
 
 async function usersPage() {
@@ -1016,7 +1187,7 @@ function fileModal() {
 
 function morePage() {
   const cards = [
-    can('contacts.view') ? quickCard('contacts', 'contacts', 'Contatos', 'Familiares, médicos e emergências') : '',
+    can('contacts.view') ? quickCard('contacts', 'contacts', 'Pessoas e contatos', 'Família, cuidadores, médicos e locais') : '',
     can('medications.view') ? quickCard('medications', 'medications', 'Medicamentos', 'Orientações e horários') : '',
     can('recipes.view') ? quickCard('recipes', 'recipes', 'Receitas culinárias', 'Ingredientes, preparo, fotos e links') : '',
     can('photos.view') ? quickCard('photos', 'photo', 'Fotos', 'Galeria da Maria Elis') : '',
@@ -1094,6 +1265,7 @@ function modalHtml() {
   switch (state.modal.type) {
     case 'quick': return quickRegisterModal();
     case 'contact': return contactModal(state.modal.data);
+    case 'care-location': return careLocationModal(state.modal.data);
     case 'user': return userModal(state.modal.data);
     case 'pin': return pinModal(state.modal.data.userId);
     case 'medication': return medicationModal();
@@ -1146,12 +1318,21 @@ function closeModal() {
   render();
 }
 
-async function openContact(id) {
-  const result = await supabase.from('contacts').select('*').eq('id', id).single();
-  if (result.error) throw result.error;
-  openModal('contact', result.data);
+async function openContact(id = '') {
+  let record = {};
+  if (id) {
+    const result = await supabase.from('contacts').select('*').eq('id', id).single();
+    if (result.error) throw result.error;
+    record = result.data;
+  }
+  openModal('contact', await contactEditorData(record));
 }
-
+async function openCareLocation(id = '') {
+  if (!id) return openModal('care-location', { location_type:'clinic', active:true });
+  const result = await supabase.from('care_locations').select('*').eq('id',id).single();
+  if (result.error) throw result.error;
+  openModal('care-location', result.data);
+}
 async function openUser(id) {
   const result = await listUsers();
   const user = (result.users || []).find((item) => (item.user_id || item.id) === id);
@@ -1300,7 +1481,13 @@ function bind() {
     if (canQuickRegister()) openModal('quick');
   }));
   document.querySelectorAll('[data-action="new-contact"]').forEach((button) => button.addEventListener('click', () => {
-    if (requirePermission('contacts.create')) openModal('contact');
+    if (requirePermission('contacts.create')) runBusy(() => openContact(''));
+  }));
+  document.querySelectorAll('[data-action="new-care-location"]').forEach((button) => button.addEventListener('click', () => {
+    if (requirePermission('contacts.create')) openCareLocation('');
+  }));
+  document.querySelectorAll('[data-care-location-edit]').forEach((button) => button.addEventListener('click', () => {
+    if (requirePermission('contacts.edit')) runBusy(() => openCareLocation(button.dataset.careLocationEdit));
   }));
   document.querySelectorAll('[data-action="new-user"]').forEach((button) => button.addEventListener('click', () => {
     if (requirePermission('users.manage')) openModal('user');
@@ -1470,35 +1657,178 @@ function bind() {
 
   document.querySelector('#contact-form')?.addEventListener('submit', async (event) => {
     event.preventDefault();
-    const form = new FormData(event.currentTarget);
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
     const contactId = String(form.get('id') || '');
     if (!requirePermission(contactId ? 'contacts.edit' : 'contacts.create')) return;
     await runBusy(async () => {
-      const id = contactId;
-      const payload = {
+      const type = String(form.get('contact_type') || 'other');
+      const email = String(form.get('email') || '').trim().toLowerCase();
+      const appAccess = form.get('app_access_enabled') === 'on';
+      const existingMembershipId = String(form.get('membership_id') || '');
+      const existingUserId = String(form.get('linked_user_id') || '');
+      const selectedRole = String(form.get('access_role') || contactRoleForType(type));
+      const isEmergency = form.get('is_emergency') === 'on';
+      const basePayload = {
         family_id: state.context.membership.family_id,
         full_name: String(form.get('full_name') || '').trim(),
-        relationship_type: String(form.get('relationship_type') || 'other').trim() || 'other',
+        contact_type: type,
+        relationship_type: String(form.get('relationship_type') || type).trim() || type,
+        kinship_degree: String(form.get('kinship_degree') || '').trim(),
+        specialties: String(form.get('specialties') || '').split(/[,;\n]+/).map((x)=>x.trim()).filter(Boolean),
+        professional_registration: String(form.get('professional_registration') || '').trim(),
         phone_normalized: String(form.get('phone_normalized') || '').replace(/\D/g, '') || null,
         whatsapp_normalized: String(form.get('whatsapp_normalized') || '').replace(/\D/g, '') || null,
-        email: String(form.get('email') || '').trim() || null,
-        emergency_order: form.get('emergency_order') ? Number(form.get('emergency_order')) : null,
+        email: email || null,
+        address: { formatted: String(form.get('address') || '').trim() },
+        is_emergency: isEmergency,
+        emergency_order: isEmergency ? (Number(form.get('emergency_order') || 1) || 1) : null,
         active: form.get('active') !== 'false',
+        notes: String(form.get('notes') || '').trim(),
+        updated_by: state.context.session.user.id,
       };
-      const query = id
-        ? supabase.from('contacts').update(payload).eq('id', id).select().single()
-        : supabase.from('contacts').insert(payload).select().single();
-      const result = await query;
-      if (result.error) throw result.error;
+      if (!basePayload.full_name) throw new Error('Informe o nome completo.');
+
+      const contactResult = contactId
+        ? await supabase.from('contacts').update(basePayload).eq('id',contactId).select('*').single()
+        : await supabase.from('contacts').insert({...basePayload,created_by:state.context.session.user.id}).select('*').single();
+      if (contactResult.error) throw contactResult.error;
+      const savedContact = contactResult.data;
+
+      const clearLinks = await supabase.from('contact_care_locations').delete().eq('contact_id',savedContact.id);
+      if (clearLinks.error) throw clearLinks.error;
+      const selectedLocations = [...formElement.querySelectorAll('input[name="care_location_id"]:checked')].map((input)=>input.value);
+      if (type === 'health_professional' && selectedLocations.length) {
+        const linkResult = await supabase.from('contact_care_locations').insert(selectedLocations.map((locationId)=>({
+          contact_id:savedContact.id, location_id:locationId, created_by:state.context.session.user.id,
+        })));
+        if (linkResult.error) throw linkResult.error;
+      }
+
+      let membershipId = existingMembershipId || null;
+      let userId = existingUserId || null;
+      let listedUsers = [];
+      if (isAdmin()) {
+        try { listedUsers = (await listUsers()).users || []; } catch {}
+      }
+      let linkedUser = listedUsers.find((item)=>item.membership_id===membershipId || (userId && (item.user_id||item.id)===userId)) || null;
+      if (!linkedUser && email) linkedUser = listedUsers.find((item)=>String(item.email||'').toLowerCase()===email) || null;
+
+      if (appAccess) {
+        if (!isAdmin()) throw new Error('Somente Pai, Mãe ou Administrador podem liberar acesso ao app.');
+        if (!email) throw new Error('Informe o e-mail para liberar acesso ao app.');
+        const commonUser = {
+          email,
+          role:selectedRole,
+          displayName:basePayload.full_name,
+          preferredName:basePayload.full_name.split(/\s+/)[0] || basePayload.full_name,
+          phone:basePayload.phone_normalized || '',
+          whatsapp:basePayload.whatsapp_normalized || '',
+          address:String(form.get('address') || '').trim(),
+          relationshipToChild:basePayload.kinship_degree || basePayload.relationship_type,
+          startsOn:todayIso(),
+          notes:basePayload.notes,
+          active:true,
+        };
+        if (linkedUser) {
+          userId = linkedUser.user_id || linkedUser.id;
+          membershipId = linkedUser.membership_id;
+          await updateUser({...commonUser,userId});
+          const pin = String(form.get('access_pin') || '');
+          if (pin) {
+            if (!/^[0-9]{6,12}$/.test(pin)) throw new Error('O PIN deve ter entre 6 e 12 números.');
+            await resetUserPin(userId,pin);
+          }
+        } else {
+          const pin = String(form.get('access_pin') || '');
+          if (!/^[0-9]{6,12}$/.test(pin)) throw new Error('Informe um PIN temporário de 6 a 12 números.');
+          const created = await createUser({...commonUser,pin});
+          userId = created.userId;
+          const refreshed = (await listUsers()).users || [];
+          linkedUser = refreshed.find((item)=>(item.user_id||item.id)===userId);
+          membershipId = linkedUser?.membership_id || null;
+          if (!membershipId) throw new Error('Usuário criado, mas o vínculo familiar não foi localizado.');
+        }
+
+        const checked = new Set([...formElement.querySelectorAll('input[name="contact_permission"]:checked')].map((input)=>input.value));
+        const definitions = state.modal?.data?.permissionDefinitions || [];
+        for (const def of definitions) {
+          if (def.code === 'users.manage') continue;
+          const permissionResult = await supabase.rpc('set_membership_permission',{
+            target_membership_id:membershipId,
+            target_permission_code:def.code,
+            target_allowed:['father','mother'].includes(selectedRole) ? true : checked.has(def.code),
+          });
+          if (permissionResult.error) throw permissionResult.error;
+        }
+        const linkContact = await supabase.from('contacts').update({
+          membership_id:membershipId, app_access_enabled:true, updated_by:state.context.session.user.id,
+        }).eq('id',savedContact.id);
+        if (linkContact.error) throw linkContact.error;
+      } else {
+        if (linkedUser && isAdmin()) {
+          userId = linkedUser.user_id || linkedUser.id;
+          if (userId === state.context.session.user.id) throw new Error('Você não pode retirar o próprio acesso neste cadastro.');
+          await updateUser({
+            userId,
+            email:linkedUser.email || email,
+            role:linkedUser.role || selectedRole,
+            displayName:linkedUser.display_name || basePayload.full_name,
+            preferredName:linkedUser.preferred_name || '',
+            birthDate:linkedUser.birth_date || null,
+            phone:linkedUser.phone_normalized || basePayload.phone_normalized || '',
+            whatsapp:linkedUser.whatsapp_normalized || basePayload.whatsapp_normalized || '',
+            address:addressText(linkedUser.address),
+            relationshipToChild:linkedUser.relationship_to_child || basePayload.relationship_type,
+            startsOn:String(linkedUser.starts_at||'').slice(0,10)||null,
+            emergencyContactName:linkedUser.emergency_contact_name || '',
+            emergencyContactPhone:linkedUser.emergency_contact_phone || '',
+            notes:linkedUser.notes || '',
+            active:false,
+          });
+        }
+        const unlink = await supabase.from('contacts').update({
+          membership_id:membershipId, app_access_enabled:false, updated_by:state.context.session.user.id,
+        }).eq('id',savedContact.id);
+        if (unlink.error) throw unlink.error;
+      }
+
       const photo = document.querySelector('#contact-photo')?.files?.[0];
       if (photo) {
-        const cropped = await cropImage(photo, { zoom: Number(document.querySelector('#contact-zoom')?.value || 1) });
-        await uploadFile(cropped, { fileType: 'avatar', category: 'profile', relatedRecordType: 'contact', relatedRecordId: result.data.id, contactId: result.data.id });
+        const cropped = await cropImage(photo,{zoom:Number(document.querySelector('#contact-zoom')?.value||1)});
+        await uploadFile(cropped,{fileType:'avatar',category:'profile',relatedRecordType:'contact',relatedRecordId:savedContact.id,contactId:savedContact.id});
       }
       state.modal = null;
       state.page = 'contacts';
       await render();
-    }, 'Contato salvo.');
+    }, 'Pessoa salva.');
+  });
+
+  document.querySelector('#care-location-form')?.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    const id = String(form.get('id') || '');
+    if (!requirePermission(id ? 'contacts.edit' : 'contacts.create')) return;
+    await runBusy(async () => {
+      const payload = {
+        family_id:state.context.membership.family_id,
+        name:String(form.get('name')||'').trim(),
+        location_type:String(form.get('location_type')||'clinic'),
+        address:String(form.get('address')||'').trim(),
+        phone_normalized:String(form.get('phone_normalized')||'').replace(/\D/g,'')||null,
+        notes:String(form.get('notes')||'').trim(),
+        active:form.get('active')!=='false',
+        updated_by:state.context.session.user.id,
+      };
+      if (!payload.name) throw new Error('Informe o nome da clínica ou hospital.');
+      const result = id
+        ? await supabase.from('care_locations').update(payload).eq('id',id).select('*').single()
+        : await supabase.from('care_locations').insert({...payload,created_by:state.context.session.user.id}).select('*').single();
+      if (result.error) throw result.error;
+      state.modal=null;
+      state.page='contacts';
+      await render();
+    }, id ? 'Local atualizado.' : 'Local cadastrado.');
   });
 
   document.querySelector('#user-form')?.addEventListener('submit', async (event) => {
@@ -2014,6 +2344,19 @@ function bind() {
   bindFilePreview('gallery-photo');
   bindFilePreview('recipe-photo');
   bindPhotoPreview();
+  updateContactConditionalFields();
+  document.querySelector('#contact-type')?.addEventListener('change', () => updateContactConditionalFields({applyDefaults:true}));
+  document.querySelector('#contact-app-access')?.addEventListener('change', () => updateContactConditionalFields());
+  document.querySelector('#contact-access-role')?.addEventListener('change', (event) => {
+    applyContactPermissionDefaults(event.target.value);
+    updateContactConditionalFields();
+  });
+  document.querySelector('#care-location-address')?.addEventListener('input', (event) => {
+    const holder = document.querySelector('#care-location-map-link');
+    if (!holder) return;
+    const url = googleMapsUrl(event.target.value);
+    holder.innerHTML = url ? `<a class="button button--secondary button--small" href="${attr(url)}" target="_blank" rel="noopener">Ver no Google Maps</a>` : '';
+  });
 }
 
 render();
