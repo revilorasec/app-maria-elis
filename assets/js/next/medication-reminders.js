@@ -124,8 +124,10 @@ async function scheduleNative(tasks) {
       extra: { taskId: task.id, medicationId: task.medication_id || null },
     }));
   if (!notifications.length) return;
-  try { await plugin.schedule({ notifications }); }
-  catch (error) { console.warn('Agendamento de alertas nativos:', error); }
+  try {
+    await plugin.cancel({ notifications: notifications.map((item) => ({ id: item.id })) }).catch(() => {});
+    await plugin.schedule({ notifications });
+  } catch (error) { console.warn('Agendamento de alertas nativos:', error); }
 }
 
 async function upcomingMedicationTasks({ medicationId = '', days = 30 } = {}) {
