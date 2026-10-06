@@ -421,7 +421,7 @@ async function homePage() {
   const pendingAcks = visibleEvents.filter((event) => event.requires_acknowledgement && !eventAcknowledgedByMe(event)).length;
 
   const primaryActions = isCaregiver()
-    ? `<button class="quick-action quick-action--important" data-scroll-routine><span>${icon('task')}</span>Afazeres</button>
+    ? `<button class="quick-action quick-action--important" data-page="agenda"><span>${icon('task')}</span>Agenda do dia</button>
        <button class="quick-action quick-action--danger" data-page="emergency"><span>${icon('emergency')}</span>Emergência</button>
        <button class="quick-action" data-page="hospitals"><span>${icon('hospital')}</span>Hospitais</button>`
     : `<button class="quick-action" data-page="planning"><span>${icon('plan')}</span>Planejar</button>
@@ -721,10 +721,14 @@ async function medicationsPage() {
           row.leaflet_file_id ? `<button type="button" class="button button--secondary button--small" data-file-open="${attr(row.leaflet_file_id)}">Bula</button>` : '',
           row.prescription_file_id ? `<button type="button" class="button button--secondary button--small" data-file-open="${attr(row.prescription_file_id)}">Receita</button>` : '',
         ].filter(Boolean).join('');
+        const totalDoses = row.interval_hours && row.duration_days ? Math.ceil((Number(row.duration_days) * 24) / Number(row.interval_hours)) : null;
         const detailParts = [
           row.dose || 'Dose não informada',
           row.route || '',
-          schedules.length ? 'Horários: ' + schedules.join(' · ') : '',
+          row.interval_hours ? 'A cada ' + row.interval_hours + 'h' : (schedules.length ? 'Horários: ' + schedules.join(' · ') : ''),
+          row.duration_days ? row.duration_days + ' dia(s)' : '',
+          totalDoses ? totalDoses + ' dose(s)' : '',
+          row.first_dose_at ? '1ª dose: ' + formatDate(row.first_dose_at, { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' }) : '',
           row.kind === 'continuous' ? 'Uso contínuo' : 'Temporário',
         ].filter(Boolean);
         return `<article class="record-card"><span class="record-card__icon">${icon('medications')}</span><div><h2>${esc(row.name)}</h2><p>${esc(detailParts.join(' · '))}</p>${row.guidance ? `<small>${esc(row.guidance)}</small>` : ''}${row.source_appointment_id ? '<small>Prescrito em consulta</small>' : ''}${attachmentButtons ? `<div class="record-card__actions">${attachmentButtons}</div>` : ''}</div><span class="status-pill ${row.active === false ? 'status-pill--danger' : 'status-pill--success'}">${row.active === false ? 'Encerrado' : 'Ativo'}</span></article>`;
@@ -737,16 +741,27 @@ function medicationModal() {
 }
 
 async function agendaPage() {
-  if (!can('events.view')) return denyPage();
-  const rows = await listUpcomingEvents({ from: startOfLocalDay().toISOString(), limit: 500 });
-  const visible = rows.filter((event) => !isCaregiver() || event.audience_role === 'caregiver' || event.audience_role === 'all');
-  const action = canManage('events.edit') ? '<button class="button button--small" data-action="new-event">Novo evento ou aviso</button>' : '';
-  const list = visible.length
-    ? visible.map((row) => scheduleEventCard(row, { planning: !isCaregiver() })).join('')
-    : emptyState('Agenda vazia', canManage('events.edit') ? 'Adicione viagens, consultas, vacinas, exames e outros avisos.' : 'Nenhum compromisso futuro foi cadastrado.', action);
-  return `${pageHeading('Agenda', 'Eventos e avisos futuros ficam visíveis assim que são cadastrados.', action)}<section class="record-list next-record-list">${list}</section>`;
+  if (!can('events.view') && !can('tasks.view')) return denyPage();
+  const today = startOfLocalDay();
+  const [tasks, events] = await Promise.all([
+    can('tasks.view') ? listOpenRoutineTasks({ includeAllAssignments: !isCaregiver() }) : [],
+    can('events.view') ? listUpcomingEvents({ from: today.toISOString(), limit: 500 }) : [],
+  ]);
+  const visibleEvents = events.filter((event) => !isCaregiver() || event.audience_role === 'caregiver' || event.audience_role === 'all');
+  const entries = [
+    ...tasks.map((row) => ({ kind: 'task', row, at: row.due_at })),
+    ...visibleEvents.map((row) => ({ kind: 'event', row, at: row.starts_at })),
+  ].sort((left, right) => new Date(left.at) - new Date(right.at));
+  const actions = [
+    canManage('events.edit') ? '<button class="button button--secondary button--small" data-action="new-event">Novo compromisso</button>' : '',
+    canManage('tasks.manage') ? '<button class="button button--small" data-action="new-task">Nova tarefa</button>' : '',
+  ].filter(Boolean).join('');
+  const actionWrap = actions ? `<div class="heading-actions">${actions}</div>` : '';
+  const list = entries.length
+    ? groupedSchedule(entries)
+    : emptyState('Agenda do dia vazia', 'Medicamentos, consultas, exames e outras tarefas aparecerão aqui em ordem de horário.', actionWrap);
+  return `${pageHeading('Agenda do dia', 'Medicamentos, consultas, exames e tarefas em uma única agenda.', actionWrap)}<section class="planning-schedule">${list}</section>`;
 }
-
 function eventModal(record = null) {
   const editing = Boolean(record?.id);
   const acknowledged = editing ? eventAcknowledgedByMe(record) : false;

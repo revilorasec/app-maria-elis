@@ -17,10 +17,10 @@ async function start() {
     await import('./next/input-formatters.js?v=1');
     await import('./next/pwa-install-v24.js?v=24');
   } else {
-    await import('./next/app-next.js?v=21');
+    await import('./next/app-next.js?v=22');
     await import('./next/input-formatters.js?v=1');
     await import('./next/medication-reminders.js?v=2');
-    await import('./next/medical-appointments-v24.js?v=2');
+    await import('./next/medical-appointments-v25.js?v=1');
     await import('./next/pwa-install-v24.js?v=24');
   }
 
