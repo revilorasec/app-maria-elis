@@ -4,6 +4,7 @@ import { createPermissionChecker, roleLabel, permissionLabel } from './permissio
 import { renderFilePicker, bindFilePreview, uploadSelectedFile, uploadFile } from './file-picker.js?v=20';
 import { cropImage } from './photo-editor.js?v=20';
 import { syncMedicationTasks, completeCareTask } from './care-service.js?v=21';
+import { enableMedicationAlerts, scheduleMedicationRemindersForMedication } from './medication-reminders.js?v=2';
 import { addIcsToCalendar } from './ics.js?v=20';
 import { planLegacyImport } from './migration-preview.js?v=20';
 import { listUsers, createUser, updateUser, resetUserPin, setUserBlock, unblockUser, setRolePermission } from './identity-client.js?v=20';
@@ -736,8 +737,63 @@ async function medicationsPage() {
     : emptyState('Nenhum medicamento', canManage('medications.edit') ? 'Cadastre medicamentos e horários para gerar afazeres automaticamente.' : 'Nenhum medicamento foi cadastrado.', action);
   return `${pageHeading('Medicamentos', 'Horários, instruções, fotos e bula ficam reunidos aqui.', action)}<section class="record-list next-record-list">${list}</section>`;
 }
+function standaloneMedicationNow() {
+  const date = new Date();
+  date.setSeconds(0, 0);
+  return localDateTimeValue(date);
+}
+
+function standaloneMedicationDoseDates(firstDoseRaw, intervalHours, durationDays) {
+  const start = new Date(firstDoseRaw);
+  const interval = Number(intervalHours);
+  const days = Number(durationDays);
+  if (Number.isNaN(start.getTime()) || !Number.isInteger(interval) || interval < 1 || !Number.isInteger(days) || days < 1) return [];
+  const end = start.getTime() + days * 86400000;
+  const step = interval * 3600000;
+  const rows = [];
+  for (let at = start.getTime(), guard = 0; at < end && guard < 1500; at += step, guard += 1) rows.push(new Date(at));
+  return rows;
+}
+
+function standaloneMedicationPreview(firstDoseRaw, intervalHours, durationDays) {
+  const doses = standaloneMedicationDoseDates(firstDoseRaw, intervalHours, durationDays);
+  if (!doses.length) return 'Informe primeira dose, intervalo e quantidade de dias.';
+  const perDay = 24 / Number(intervalHours);
+  const perDayLabel = Number.isInteger(perDay)
+    ? `${perDay} dose(s) por dia`
+    : `aprox. ${perDay.toFixed(1).replace('.', ',')} dose(s) por dia`;
+  const first = doses.slice(0, 8).map((date) => formatDate(date, { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })).join(' · ');
+  return `${perDayLabel} · ${doses.length} dose(s) no tratamento. ${first}${doses.length > 8 ? ` · +${doses.length - 8}` : ''}`;
+}
+
 function medicationModal() {
-  return `<div class="modal-backdrop"><section class="modal" role="dialog" aria-modal="true" data-modal-panel><button type="button" class="modal__close" data-action="close-modal">×</button><h2>Novo medicamento</h2><form id="medication-form"><div class="form-grid"><label>Nome<input name="name" required></label><label>Tipo<select name="kind"><option value="temporary">Temporário</option><option value="continuous">Uso contínuo</option></select></label></div><div class="form-grid"><label>Dose<input name="dose" placeholder="Ex.: 5 ml"></label><label>Via<input name="route" placeholder="Ex.: Oral"></label></div><div class="form-grid"><label>Horário<input name="time" type="time" required></label><label>Início<input name="starts_on" type="date" value="${todayIso()}" required></label></div><label>Orientações<textarea name="instructions" placeholder="Orientações importantes"></textarea></label><div class="next-form-actions"><button type="button" class="button button--secondary" data-action="close-modal">Cancelar</button><button class="button">Salvar e gerar afazeres</button></div></form></section></div>`;
+  const firstDose = standaloneMedicationNow();
+  return `<div class="modal-backdrop"><section class="modal modal--wide" role="dialog" aria-modal="true" data-modal-panel>
+    <button type="button" class="modal__close" data-action="close-modal">×</button>
+    <h2>Novo medicamento</h2>
+    <p class="muted">O mesmo cadastro usado em uma consulta. As doses entram automaticamente na Agenda do dia.</p>
+    <form id="medication-form">
+      <div class="form-grid"><label>Nome<input name="name" required placeholder="Ex.: Amoxicilina"></label><label>Tipo<select name="kind"><option value="temporary">Temporário</option><option value="continuous">Uso contínuo</option></select></label></div>
+      <div class="form-grid"><label>Dose<input name="dose" placeholder="Ex.: 5 ml"></label><label>Via<input name="route" placeholder="Ex.: Oral"></label></div>
+      <div class="form-grid"><label>Primeira dose<input id="medication-first-dose" name="first_dose_at" type="datetime-local" value="${attr(firstDose)}" required></label><label>A cada quantas horas?<input id="medication-interval-hours" name="interval_hours" type="number" min="1" max="168" step="1" value="8" required></label></div>
+      <div class="form-grid"><label>Por quantos dias?<input id="medication-duration-days" name="duration_days" type="number" min="1" max="365" step="1" value="7" required></label><label>Orientações<input name="instructions" placeholder="Ex.: após alimentação, agitar antes de usar"></label></div>
+      <div id="medication-dose-preview" class="instruction-box instruction-box--neutral"><strong>Esquema calculado</strong><p>${esc(standaloneMedicationPreview(firstDose, 8, 7))}</p></div>
+      <section class="settings-card">
+        <div class="section-title"><h3>Fotos do remédio</h3><span class="status-pill status-pill--soft">até 4</span></div>
+        <div class="form-grid">
+          <label>Foto 1<input id="medication-photo-1" type="file" accept="image/*"></label>
+          <label>Foto 2<input id="medication-photo-2" type="file" accept="image/*"></label>
+          <label>Foto 3<input id="medication-photo-3" type="file" accept="image/*"></label>
+          <label>Foto 4<input id="medication-photo-4" type="file" accept="image/*"></label>
+        </div>
+      </section>
+      <section class="settings-card">
+        <label>Bula <small>PDF ou imagem</small><input id="medication-leaflet" type="file" accept="application/pdf,image/*"></label>
+      </section>
+      <div class="instruction-box instruction-box--neutral"><strong>Agenda do dia</strong><p>A primeira dose informada como já dada será marcada como concluída. Todas as próximas doses ficarão pendentes para a babá, com dose, via e orientações.</p></div>
+      <div class="next-form-actions"><button type="button" class="button button--secondary" data-action="close-modal">Cancelar</button><button class="button">Salvar e gerar Agenda do dia</button></div>
+    </form>
+  </section></div>`;
 }
 
 async function agendaPage() {
@@ -1628,30 +1684,138 @@ function bind() {
     if (!requirePermission('medications.edit')) return;
     const form = new FormData(event.currentTarget);
     await runBusy(async () => {
+      const name = String(form.get('name') || '').trim();
+      const firstDoseRaw = String(form.get('first_dose_at') || '');
+      const intervalHours = Number(form.get('interval_hours') || 0);
+      const durationDays = Number(form.get('duration_days') || 0);
+      const firstDose = new Date(firstDoseRaw);
+      if (!name) throw new Error('Informe o nome do medicamento.');
+      if (!firstDoseRaw || Number.isNaN(firstDose.getTime())) throw new Error('Informe a data e o horário da primeira dose.');
+      if (!Number.isInteger(intervalHours) || intervalHours < 1 || intervalHours > 168) throw new Error('Informe um intervalo válido em horas.');
+      if (!Number.isInteger(durationDays) || durationDays < 1 || durationDays > 365) throw new Error('Informe por quantos dias o medicamento será administrado.');
+
+      const doses = standaloneMedicationDoseDates(firstDoseRaw, intervalHours, durationDays);
+      if (!doses.length) throw new Error('Não foi possível calcular as doses.');
+      const lastDose = doses[doses.length - 1];
+      const kind = String(form.get('kind') || 'temporary');
+      const instructions = String(form.get('instructions') || '').trim();
+      const dose = String(form.get('dose') || '').trim();
+      const route = String(form.get('route') || '').trim();
+
       const medicationResult = await supabase.from('medications').insert({
         family_id: state.context.membership.family_id,
-        name: form.get('name'),
-        kind: form.get('kind'),
-        dose: form.get('dose') || '',
-        route: form.get('route') || '',
-        guidance: form.get('instructions') || '',
-        starts_on: form.get('starts_on'),
+        name,
+        kind,
+        dose,
+        route,
+        guidance: instructions,
+        starts_on: dateOnly(firstDose),
+        ends_on: kind === 'continuous' ? null : dateOnly(lastDose),
+        frequency: 'scheduled',
+        frequency_description: `A cada ${intervalHours} hora(s) por ${durationDays} dia(s)`,
+        first_dose_at: firstDose.toISOString(),
+        interval_hours: intervalHours,
+        duration_days: durationDays,
         active: true,
+        created_by: state.context.session.user.id,
+        updated_by: state.context.session.user.id,
       }).select().single();
       if (medicationResult.error) throw medicationResult.error;
-      const scheduleResult = await supabase.from('medication_schedules').insert({
-        medication_id: medicationResult.data.id,
-        time_of_day: form.get('time'),
+      let medication = medicationResult.data;
+
+      const uniqueTimes = [...new Set(doses.map((date) => `${String(date.getHours()).padStart(2,'0')}:${String(date.getMinutes()).padStart(2,'0')}`))];
+      const scheduleResult = await supabase.from('medication_schedules').insert(uniqueTimes.map((time) => ({
+        medication_id: medication.id,
+        time_of_day: time,
         active: true,
-      }).select().single();
+      }))).select('*');
       if (scheduleResult.error) throw scheduleResult.error;
-      const end = new Date(); end.setDate(end.getDate() + 30);
-      await syncMedicationTasks(supabase, medicationResult.data, [scheduleResult.data], form.get('starts_on'), end.toISOString().slice(0, 10));
+      const scheduleByTime = new Map((scheduleResult.data || []).map((row) => [String(row.time_of_day || '').slice(0,5), row.id]));
+
+      const now = Date.now();
+      const taskInstructions = [
+        dose ? 'Dose: ' + dose : '',
+        route ? 'Via: ' + route : '',
+        instructions,
+      ].filter(Boolean).join(' · ');
+      const taskRows = doses.map((due, index) => {
+        const time = `${String(due.getHours()).padStart(2,'0')}:${String(due.getMinutes()).padStart(2,'0')}`;
+        const firstAlreadyGiven = index === 0 && due.getTime() <= now;
+        return {
+          family_id: state.context.membership.family_id,
+          medication_id: medication.id,
+          schedule_id: scheduleByTime.get(time) || null,
+          title: 'Administrar ' + name,
+          due_at: due.toISOString(),
+          status: firstAlreadyGiven ? 'completed' : 'pending',
+          completed_at: firstAlreadyGiven ? due.toISOString() : null,
+          completed_by: firstAlreadyGiven ? state.context.session.user.id : null,
+          note: firstAlreadyGiven ? 'Primeira dose informada como já administrada no cadastro do medicamento.' : '',
+          task_kind: 'medication',
+          instructions: taskInstructions,
+          assigned_role: 'caregiver',
+          requires_photo: false,
+          requires_note: false,
+          priority: 2,
+        };
+      });
+      const taskResult = await supabase.from('care_tasks').insert(taskRows);
+      if (taskResult.error) throw taskResult.error;
+
+      const photoIds = [];
+      for (let index = 1; index <= 4; index += 1) {
+        const file = document.querySelector(`#medication-photo-${index}`)?.files?.[0];
+        if (!file) continue;
+        const uploaded = await uploadFile(file, {
+          fileType: 'medication-photo',
+          category: 'medication',
+          relatedRecordType: 'medication',
+          relatedRecordId: medication.id,
+        });
+        if (uploaded?.id) photoIds.push(uploaded.id);
+      }
+      const leaflet = document.querySelector('#medication-leaflet')?.files?.[0];
+      let leafletFileId = null;
+      if (leaflet) {
+        const uploaded = await uploadFile(leaflet, {
+          fileType: 'medication-leaflet',
+          category: 'medication',
+          relatedRecordType: 'medication',
+          relatedRecordId: medication.id,
+        });
+        leafletFileId = uploaded?.id || null;
+      }
+      if (photoIds.length || leafletFileId) {
+        const updateResult = await supabase.from('medications').update({
+          photo_file_ids: photoIds.slice(0,4),
+          leaflet_file_id: leafletFileId,
+          updated_by: state.context.session.user.id,
+        }).eq('id', medication.id).select('*').single();
+        if (updateResult.error) throw updateResult.error;
+        medication = updateResult.data;
+      }
+
+      await enableMedicationAlerts().catch(() => false);
+      await scheduleMedicationRemindersForMedication(medication.id).catch(() => {});
+
       state.modal = null;
-      state.page = 'medications';
+      state.page = 'agenda';
       await render();
-    }, 'Medicamento e afazeres cadastrados.');
+    }, 'Medicamento salvo e Agenda do dia gerada.');
   });
+
+  const medicationPreviewUpdater = () => {
+    const preview = document.querySelector('#medication-dose-preview p');
+    if (!preview) return;
+    preview.textContent = standaloneMedicationPreview(
+      document.querySelector('#medication-first-dose')?.value || '',
+      Number(document.querySelector('#medication-interval-hours')?.value || 0),
+      Number(document.querySelector('#medication-duration-days')?.value || 0),
+    );
+  };
+  document.querySelector('#medication-first-dose')?.addEventListener('input', medicationPreviewUpdater);
+  document.querySelector('#medication-interval-hours')?.addEventListener('input', medicationPreviewUpdater);
+  document.querySelector('#medication-duration-days')?.addEventListener('input', medicationPreviewUpdater);
 
   document.querySelector('#event-form')?.addEventListener('submit', async (event) => {
     event.preventDefault();
