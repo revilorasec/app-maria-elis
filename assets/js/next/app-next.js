@@ -708,16 +708,30 @@ function pinModal(userId) {
 
 async function medicationsPage() {
   if (!can('medications.view')) return denyPage();
-  const result = await supabase.from('medications').select('*').eq('family_id', state.context.membership.family_id).order('created_at', { ascending: false });
+  const result = await supabase.from('medications').select('*,medication_schedules(*)').eq('family_id', state.context.membership.family_id).order('created_at', { ascending: false });
   if (result.error) throw result.error;
   const rows = result.data || [];
   const action = canManage('medications.edit') ? '<button class="button button--small" data-action="new-medication">Cadastrar</button>' : '';
   const list = rows.length
-    ? rows.map((row) => `<article class="record-card"><span class="record-card__icon">${icon('medications')}</span><div><h2>${esc(row.name)}</h2><p>${esc(row.dose || 'Dose não informada')} · ${row.kind === 'continuous' ? 'Uso contínuo' : 'Temporário'}</p><small>${row.starts_on ? `Desde ${formatDate(row.starts_on)}` : ''}</small></div><span class="status-pill ${row.active === false ? 'status-pill--danger' : 'status-pill--success'}">${row.active === false ? 'Encerrado' : 'Ativo'}</span></article>`).join('')
+    ? rows.map((row) => {
+        const schedules = (row.medication_schedules || []).filter((item) => item.active !== false).map((item) => String(item.time_of_day || '').slice(0,5)).filter(Boolean);
+        const photos = Array.isArray(row.photo_file_ids) ? row.photo_file_ids : [];
+        const attachmentButtons = [
+          ...photos.slice(0,4).map((id,index) => `<button type="button" class="button button--secondary button--small" data-file-open="${attr(id)}">Foto ${index+1}</button>`),
+          row.leaflet_file_id ? `<button type="button" class="button button--secondary button--small" data-file-open="${attr(row.leaflet_file_id)}">Bula</button>` : '',
+          row.prescription_file_id ? `<button type="button" class="button button--secondary button--small" data-file-open="${attr(row.prescription_file_id)}">Receita</button>` : '',
+        ].filter(Boolean).join('');
+        const detailParts = [
+          row.dose || 'Dose não informada',
+          row.route || '',
+          schedules.length ? 'Horários: ' + schedules.join(' · ') : '',
+          row.kind === 'continuous' ? 'Uso contínuo' : 'Temporário',
+        ].filter(Boolean);
+        return `<article class="record-card"><span class="record-card__icon">${icon('medications')}</span><div><h2>${esc(row.name)}</h2><p>${esc(detailParts.join(' · '))}</p>${row.guidance ? `<small>${esc(row.guidance)}</small>` : ''}${row.source_appointment_id ? '<small>Prescrito em consulta</small>' : ''}${attachmentButtons ? `<div class="record-card__actions">${attachmentButtons}</div>` : ''}</div><span class="status-pill ${row.active === false ? 'status-pill--danger' : 'status-pill--success'}">${row.active === false ? 'Encerrado' : 'Ativo'}</span></article>`;
+      }).join('')
     : emptyState('Nenhum medicamento', canManage('medications.edit') ? 'Cadastre medicamentos e horários para gerar afazeres automaticamente.' : 'Nenhum medicamento foi cadastrado.', action);
-  return `${pageHeading('Medicamentos', 'Horários e afazeres são gerados sem duplicação.', action)}<section class="record-list next-record-list">${list}</section>`;
+  return `${pageHeading('Medicamentos', 'Horários, instruções, fotos e bula ficam reunidos aqui.', action)}<section class="record-list next-record-list">${list}</section>`;
 }
-
 function medicationModal() {
   return `<div class="modal-backdrop"><section class="modal" role="dialog" aria-modal="true" data-modal-panel><button type="button" class="modal__close" data-action="close-modal">×</button><h2>Novo medicamento</h2><form id="medication-form"><div class="form-grid"><label>Nome<input name="name" required></label><label>Tipo<select name="kind"><option value="temporary">Temporário</option><option value="continuous">Uso contínuo</option></select></label></div><div class="form-grid"><label>Dose<input name="dose" placeholder="Ex.: 5 ml"></label><label>Via<input name="route" placeholder="Ex.: Oral"></label></div><div class="form-grid"><label>Horário<input name="time" type="time" required></label><label>Início<input name="starts_on" type="date" value="${todayIso()}" required></label></div><label>Orientações<textarea name="instructions" placeholder="Orientações importantes"></textarea></label><div class="next-form-actions"><button type="button" class="button button--secondary" data-action="close-modal">Cancelar</button><button class="button">Salvar e gerar afazeres</button></div></form></section></div>`;
 }
