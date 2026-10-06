@@ -14,7 +14,11 @@ function hashId(value) {
 }
 
 function nativeNotifications() {
-  return window.Capacitor?.Plugins?.LocalNotifications || null;
+  if (window.Capacitor?.Plugins?.LocalNotifications) return window.Capacitor.Plugins.LocalNotifications;
+  if (window.Capacitor?.registerPlugin) {
+    try { return window.Capacitor.registerPlugin('LocalNotifications'); } catch {}
+  }
+  return null;
 }
 
 function bodyFor(task) {
